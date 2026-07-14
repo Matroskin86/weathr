@@ -234,9 +234,12 @@ impl AppState {
                 String::new()
             };
 
+            // Компактный формат: место сразу после часов, без слова "Погода:",
+            // чтобы строка влезала в ~120 колонок (экран 1440px при шрифте 20)
             format!(
-                "{} | {}Погода: {} | Темп: {:.1}{}{} | Ветер: {:.1}{} {} | Осадки: {:.1}{}{}{}",
+                "{}{} | {}{} | {:.1}{}{} | Ветер: {:.1}{} {} | Осадки: {:.1}{}{}",
                 clock,
+                location_str,
                 offline_indicator,
                 self.get_condition_text(),
                 temp,
@@ -247,7 +250,6 @@ impl AppState {
                 wind_rumb_ru(weather.wind_direction),
                 precip,
                 precip_unit,
-                location_str,
                 quit_hint
             )
         } else {
