@@ -49,19 +49,20 @@ pub fn format_temperature(celsius: f64, unit: TemperatureUnit) -> (f64, &'static
 
 /// The input value must be in Ms
 pub fn format_wind_speed(ms: f64, unit: WindSpeedUnit) -> (f64, &'static str) {
+    // Русские подписи единиц для HUD (локальный патч скринсейвера)
     match unit {
-        WindSpeedUnit::Ms => (ms, "m/s"),
-        WindSpeedUnit::Kmh => (ms_to_kmh(ms), "km/h"),
-        WindSpeedUnit::Mph => (ms_to_mph(ms), "mph"),
-        WindSpeedUnit::Kn => (ms_to_kn(ms), "kn"),
+        WindSpeedUnit::Ms => (ms, "м/с"),
+        WindSpeedUnit::Kmh => (ms_to_kmh(ms), "км/ч"),
+        WindSpeedUnit::Mph => (ms_to_mph(ms), "миль/ч"),
+        WindSpeedUnit::Kn => (ms_to_kn(ms), "уз"),
     }
 }
 
 /// The input value must be in Mm
 pub fn format_precipitation(mm: f64, unit: PrecipitationUnit) -> (f64, &'static str) {
     match unit {
-        PrecipitationUnit::Mm => (mm, "mm"),
-        PrecipitationUnit::Inch => (mm_to_inch(mm), "in"),
+        PrecipitationUnit::Mm => (mm, "мм"),
+        PrecipitationUnit::Inch => (mm_to_inch(mm), "дюйм"),
     }
 }
 

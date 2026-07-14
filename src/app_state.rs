@@ -70,24 +70,25 @@ impl AppState {
 
     pub fn get_condition_text(&self) -> &str {
         if let Some(ref weather) = self.current_weather {
+            // Русские названия погоды для HUD (локальный патч скринсейвера)
             match weather.condition {
-                WeatherCondition::Clear => "Clear",
-                WeatherCondition::Cloudy => "Cloudy",
-                WeatherCondition::PartlyCloudy => "Partly Cloudy",
-                WeatherCondition::Overcast => "Overcast",
-                WeatherCondition::Fog => "Fog",
-                WeatherCondition::Drizzle => "Drizzle",
-                WeatherCondition::FreezingRain => "Freezing Rain",
-                WeatherCondition::Rain => "Rain",
-                WeatherCondition::Snow => "Snow",
-                WeatherCondition::SnowGrains => "Snow Grains",
-                WeatherCondition::RainShowers => "Rain Showers",
-                WeatherCondition::SnowShowers => "Snow Showers",
-                WeatherCondition::Thunderstorm => "Thunderstorm",
-                WeatherCondition::ThunderstormHail => "Thunderstorm with Hail",
+                WeatherCondition::Clear => "Ясно",
+                WeatherCondition::Cloudy => "Облачно",
+                WeatherCondition::PartlyCloudy => "Переменная облачность",
+                WeatherCondition::Overcast => "Пасмурно",
+                WeatherCondition::Fog => "Туман",
+                WeatherCondition::Drizzle => "Морось",
+                WeatherCondition::FreezingRain => "Ледяной дождь",
+                WeatherCondition::Rain => "Дождь",
+                WeatherCondition::Snow => "Снег",
+                WeatherCondition::SnowGrains => "Снежная крупа",
+                WeatherCondition::RainShowers => "Ливень",
+                WeatherCondition::SnowShowers => "Снегопад",
+                WeatherCondition::Thunderstorm => "Гроза",
+                WeatherCondition::ThunderstormHail => "Гроза с градом",
             }
         } else {
-            "Loading"
+            "Загрузка"
         }
     }
 
@@ -121,7 +122,7 @@ impl AppState {
                     None => coords,
                 },
             };
-            format!(" | Location: {}", label)
+            format!(" | Место: {}", label)
         };
 
         self.cached_weather_info = if let Some(ref weather) = self.current_weather {
@@ -130,10 +131,10 @@ impl AppState {
             let (precip, precip_unit) =
                 format_precipitation(weather.precipitation, self.units.precipitation);
 
-            let offline_indicator = if self.is_offline { "OFFLINE | " } else { "" };
+            let offline_indicator = if self.is_offline { "ОФФЛАЙН | " } else { "" };
 
             format!(
-                "{}Weather: {} | Temp: {:.1}{} | Wind: {:.1}{} | Precip: {:.1}{}{} | Press 'q' to quit",
+                "{}Погода: {} | Темп: {:.1}{} | Ветер: {:.1}{} | Осадки: {:.1}{}{} | Выход: 'q'",
                 offline_indicator,
                 self.get_condition_text(),
                 temp,
@@ -145,7 +146,7 @@ impl AppState {
                 location_str
             )
         } else {
-            format!("Weather: Loading... {}", self.loading_state.current_char())
+            format!("Погода: загрузка... {}", self.loading_state.current_char())
         };
 
         self.weather_info_needs_update = false;
@@ -347,7 +348,7 @@ mod tests {
 
         assert!(
             app.cached_weather_info
-                .contains("Location: 34.08°N, 84.29°W")
+                .contains("Место: 34.08°N, 84.29°W")
         );
         assert!(!app.cached_weather_info.contains("Alpharetta"));
     }
@@ -362,7 +363,7 @@ mod tests {
         );
         app.update_cached_info();
 
-        assert!(app.cached_weather_info.contains("Location: Alpharetta"));
+        assert!(app.cached_weather_info.contains("Место: Alpharetta"));
         assert!(!app.cached_weather_info.contains("34.08°N"));
     }
 
@@ -373,7 +374,7 @@ mod tests {
 
         assert!(
             app.cached_weather_info
-                .contains("Location: 34.08°N, 84.29°W")
+                .contains("Место: 34.08°N, 84.29°W")
         );
     }
 
@@ -389,7 +390,7 @@ mod tests {
 
         assert!(
             app.cached_weather_info
-                .contains("Location: Alpharetta (34.08°N, 84.29°W)")
+                .contains("Место: Alpharetta (34.08°N, 84.29°W)")
         );
     }
 
@@ -400,7 +401,7 @@ mod tests {
 
         assert!(
             app.cached_weather_info
-                .contains("Location: 34.08°N, 84.29°W")
+                .contains("Место: 34.08°N, 84.29°W")
         );
         assert!(!app.cached_weather_info.contains("("));
     }
