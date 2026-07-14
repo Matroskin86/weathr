@@ -10,18 +10,19 @@ use crossterm::style::Color;
 use rand::{Rng, RngExt};
 use std::io;
 
-// Позы кота (смотрит вправо; для левого направления зеркалятся)
-const CAT_SIT: [&str; 3] = ["/\\_/\\", "(o.o)", " |_| "];
-const CAT_SIT_BLINK: [&str; 3] = ["/\\_/\\", "(-.-)", " |_| "];
-const CAT_WALK_A: [&str; 3] = ["/\\_/\\", "(o.o)", "/| |\\"];
-const CAT_WALK_B: [&str; 3] = ["/\\_/\\", "(o.o)", "|\\ /|"];
-const CAT_SLEEP_A: [&str; 3] = ["  z  ", "(-.-)", " \\_/ "];
-const CAT_SLEEP_B: [&str; 3] = ["  Z  ", "(-.-)", " \\_/ "];
-const CAT_POUNCE: [&str; 3] = ["/\\_/\\", "(>o<)", "// \\\\"];
-const CAT_DIG: [&str; 3] = ["/\\_/\\", "(-.o)", "/|_|."];
+// Позы кота (смотрит вправо; для левого направления зеркалятся).
+// Компактный кот с усами =^.^= и хвостом; хвост машет при ходьбе.
+const CAT_SIT: [&str; 2] = ["  /\\_/\\", "~(=^.^=)"];
+const CAT_SIT_BLINK: [&str; 2] = ["  /\\_/\\", "~(=-.-=)"];
+const CAT_WALK_A: [&str; 2] = ["/ /\\_/\\", " (=o.o=)"];
+const CAT_WALK_B: [&str; 2] = ["\\ /\\_/\\", " (=o.o=)"];
+const CAT_SLEEP_A: [&str; 2] = ["   z    ", "~(=-.-=)"];
+const CAT_SLEEP_B: [&str; 2] = ["   Z    ", "_(=-.-=)"];
+const CAT_POUNCE: [&str; 2] = ["| /\\_/\\", " (=>o<=)"];
+const CAT_DIG: [&str; 2] = ["  /\\_/\\", "~(=-.o=)"];
 
-const CAT_HEIGHT: i16 = 3;
-const CAT_WIDTH: i16 = 5;
+const CAT_HEIGHT: i16 = 2;
+const CAT_WIDTH: i16 = 8;
 
 /// Фазы охоты на бабочку
 #[derive(Clone, Copy, PartialEq)]
@@ -257,7 +258,7 @@ impl CatSystem {
             .clamp(1.0, self.terminal_width.saturating_sub(7) as f32);
     }
 
-    fn current_pose(&self) -> [&'static str; 3] {
+    fn current_pose(&self) -> [&'static str; 2] {
         match self.state {
             CatState::Shelter => {
                 if self.frame % 90 < 8 {
