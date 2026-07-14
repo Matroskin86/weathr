@@ -31,6 +31,9 @@ pub struct Config {
     pub use_feels_like_temperature: bool,
     #[serde(default)]
     pub hide_quit_hint: bool,
+    /// Частота кадров анимации (5-60). Ниже = меньше нагрузка на CPU/батарею
+    #[serde(default = "default_fps")]
+    pub fps: u64,
     #[serde(default)]
     pub units: WeatherUnits,
     #[serde(default)]
@@ -43,6 +46,10 @@ pub struct Config {
 
 fn default_theme() -> String {
     DEFAULT_THEME.to_string()
+}
+
+fn default_fps() -> u64 {
+    30
 }
 
 #[derive(Deserialize, Debug, Default, Clone, PartialEq, Eq, Hash, Serialize, Copy)]
@@ -369,6 +376,7 @@ longitude = 0.0
             hide_hud: false,
             use_feels_like_temperature: false,
             hide_quit_hint: false,
+            fps: 30,
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -394,6 +402,7 @@ longitude = 0.0
             hide_hud: false,
             use_feels_like_temperature: false,
             hide_quit_hint: false,
+            fps: 30,
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -419,6 +428,7 @@ longitude = 0.0
             hide_hud: false,
             use_feels_like_temperature: false,
             hide_quit_hint: false,
+            fps: 30,
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -444,6 +454,7 @@ longitude = 0.0
             hide_hud: false,
             use_feels_like_temperature: false,
             hide_quit_hint: false,
+            fps: 30,
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -469,6 +480,7 @@ longitude = 0.0
             hide_hud: false,
             use_feels_like_temperature: false,
             hide_quit_hint: false,
+            fps: 30,
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),

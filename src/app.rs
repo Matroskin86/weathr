@@ -22,8 +22,6 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(300);
-const INPUT_POLL_FPS: u64 = 30;
-const FRAME_DURATION: Duration = Duration::from_millis(1000 / INPUT_POLL_FPS);
 const DEFAULT_THEME_ID: &str = "default";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,6 +133,8 @@ pub struct App {
     hide_hud: bool,
     // Координаты и провайдер для чтения устаревшего кэша в оффлайне (None при симуляции)
     offline_lookup: Option<(f64, f64, Provider)>,
+    // Длительность кадра из конфига (fps 5-60), ниже fps = меньше нагрузка на CPU
+    frame_duration: Duration,
 }
 
 impl App {
@@ -271,6 +271,15 @@ impl App {
             weather_receiver: rx,
             hide_hud: config.hide_hud,
             offline_lookup,
+            frame_duration: {
+                // 0 (Default::default без конфига) трактуем как штатные 30 fps
+                let fps = if config.fps == 0 {
+                    30
+                } else {
+                    config.fps.clamp(5, 60)
+                };
+                Duration::from_millis(1000 / fps)
+            },
         }
     }
 
@@ -454,7 +463,7 @@ impl App {
 
             renderer.flush()?;
 
-            if event::poll(FRAME_DURATION)? {
+            if event::poll(self.frame_duration)? {
                 match event::read()? {
                     Event::Resize(width, height) => {
                         renderer.manual_resize(width, height)?;
