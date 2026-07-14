@@ -24,8 +24,9 @@ impl AnimationManager {
             Box::new(StarSystem::new(term_width, term_height)),
             Box::new(MoonSystem::new(term_width, term_height, None)),
             Box::new(FireflySystem::new(term_width, term_height)),
-            Box::new(BirdSystem::new(term_width, term_height)),
+            // Солнце раньше птиц: птицы рисуются поверх и летят перед солнцем (issue #60)
             Box::new(SunSystem::new()),
+            Box::new(BirdSystem::new(term_width, term_height)),
             Box::new(CloudSystem::new(term_width, term_height)),
             Box::new(AirplaneSystem::new(term_width, term_height)),
             // Post-scene
