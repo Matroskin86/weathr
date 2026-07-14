@@ -42,6 +42,39 @@ pub struct Config {
     pub provider: HashMap<Provider, Table>,
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// Реальные самолёты над локацией (OpenSky + adsbdb)
+    #[serde(default)]
+    pub flights: FlightsConfig,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct FlightsConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Период опроса OpenSky в секундах (минимум 300; аноним - около 100 запросов/сутки)
+    #[serde(default = "default_flights_poll_secs")]
+    pub poll_secs: u64,
+    /// Полурадиус зоны поиска бортов в градусах широты
+    #[serde(default = "default_flights_radius_deg")]
+    pub radius_deg: f64,
+}
+
+fn default_flights_poll_secs() -> u64 {
+    1200
+}
+
+fn default_flights_radius_deg() -> f64 {
+    0.5
+}
+
+impl Default for FlightsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            poll_secs: default_flights_poll_secs(),
+            radius_deg: default_flights_radius_deg(),
+        }
+    }
 }
 
 fn default_theme() -> String {
@@ -377,6 +410,7 @@ longitude = 0.0
             use_feels_like_temperature: false,
             hide_quit_hint: false,
             fps: 30,
+            flights: FlightsConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -403,6 +437,7 @@ longitude = 0.0
             use_feels_like_temperature: false,
             hide_quit_hint: false,
             fps: 30,
+            flights: FlightsConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -429,6 +464,7 @@ longitude = 0.0
             use_feels_like_temperature: false,
             hide_quit_hint: false,
             fps: 30,
+            flights: FlightsConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -455,6 +491,7 @@ longitude = 0.0
             use_feels_like_temperature: false,
             hide_quit_hint: false,
             fps: 30,
+            flights: FlightsConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -481,6 +518,7 @@ longitude = 0.0
             use_feels_like_temperature: false,
             hide_quit_hint: false,
             fps: 30,
+            flights: FlightsConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),

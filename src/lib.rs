@@ -5,6 +5,7 @@ pub mod cache;
 pub mod cli;
 pub mod config;
 pub mod error;
+pub mod flights;
 pub mod geolocation;
 pub mod render;
 pub mod scene;

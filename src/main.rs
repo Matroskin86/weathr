@@ -5,6 +5,7 @@ mod app_state;
 mod cache;
 mod config;
 mod error;
+mod flights;
 mod geolocation;
 mod render;
 mod scene;

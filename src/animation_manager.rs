@@ -102,6 +102,18 @@ impl AnimationManager {
         }
     }
 
+    pub fn spawn_real_flight(&mut self, label: &str, eastbound: bool) {
+        for system in &mut self.systems {
+            system.on_real_flight(label, eastbound);
+        }
+    }
+
+    pub fn set_flights_mode(&mut self, real_only: bool) {
+        for system in &mut self.systems {
+            system.on_flights_mode(real_only);
+        }
+    }
+
     fn make_context<'a>(
         &self,
         conditions: &'a WeatherConditions,

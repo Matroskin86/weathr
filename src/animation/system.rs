@@ -57,6 +57,10 @@ pub trait AnimationSystem {
     fn on_snow_intensity(&mut self, _intensity: SnowIntensity) {}
     fn on_fog_intensity(&mut self, _intensity: FogIntensity) {}
     fn on_moon_phase(&mut self, _phase: f64) {}
+    /// Реальный борт из радиуса локации: подпись и направление (true = слева направо)
+    fn on_real_flight(&mut self, _label: &str, _eastbound: bool) {}
+    /// true = показывать только реальные борта, выключить случайные самолёты
+    fn on_flights_mode(&mut self, _real_only: bool) {}
 
     fn update(&mut self, ctx: &FrameContext<'_>, rng: &mut dyn Rng, commands: &mut FrameCommands);
     fn render(&mut self, renderer: &mut TerminalRenderer, ctx: &FrameContext<'_>)

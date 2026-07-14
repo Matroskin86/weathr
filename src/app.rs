@@ -135,6 +135,8 @@ pub struct App {
     offline_lookup: Option<(f64, f64, Provider)>,
     // Длительность кадра из конфига (fps 5-60), ниже fps = меньше нагрузка на CPU
     frame_duration: Duration,
+    // Канал с реальными бортами из OpenSky (None, если flights выключены)
+    flights_receiver: Option<mpsc::Receiver<crate::flights::FlightLabel>>,
 }
 
 impl App {
@@ -260,6 +262,19 @@ impl App {
             });
         }
 
+        let flights_receiver = if config.flights.enabled && simulate_condition.is_none() {
+            // Случайные самолёты выключаем: в небе только реальные борта
+            animations.set_flights_mode(true);
+            Some(crate::flights::spawn_flight_watcher(
+                config.location.latitude,
+                config.location.longitude,
+                config.flights.radius_deg,
+                config.flights.poll_secs,
+            ))
+        } else {
+            None
+        };
+
         Self {
             state,
             animations,
@@ -271,6 +286,7 @@ impl App {
             weather_receiver: rx,
             hide_hud: config.hide_hud,
             offline_lookup,
+            flights_receiver,
             frame_duration: {
                 // 0 (Default::default без конфига) трактуем как штатные 30 fps
                 let fps = if config.fps == 0 {
@@ -374,6 +390,14 @@ impl App {
                         attribution = "".to_string();
                     }
                 }
+            }
+
+            // Реальный борт подлетел - запускаем его по небу с подписью
+            if let Some(ref mut flights_rx) = self.flights_receiver
+                && let Ok(flight) = flights_rx.try_recv()
+            {
+                self.animations
+                    .spawn_real_flight(&flight.label, flight.eastbound);
             }
 
             renderer.clear()?;
