@@ -67,15 +67,24 @@ struct Candidate {
     icao24: String,
     callsign: String,
     eastbound: bool,
+    // Высота в метрах и скорость в км/ч (если борт их передал)
+    altitude_m: Option<f64>,
+    speed_kmh: Option<f64>,
 }
 
 fn pick_candidate(states: &[Vec<serde_json::Value>]) -> Option<Candidate> {
-    // Поля state-вектора OpenSky: 0 icao24, 1 callsign, 8 on_ground, 10 true_track
+    // Поля state-вектора OpenSky: 0 icao24, 1 callsign, 7 baro_altitude (м),
+    // 8 on_ground, 9 velocity (м/с), 10 true_track, 13 geo_altitude (м)
     states.iter().find_map(|s| {
         let icao24 = s.first()?.as_str()?.trim().to_string();
         let callsign = s.get(1)?.as_str()?.trim().to_string();
         let on_ground = s.get(8)?.as_bool()?;
         let track = s.get(10).and_then(|v| v.as_f64()).unwrap_or(90.0);
+        let altitude_m = s
+            .get(7)
+            .and_then(|v| v.as_f64())
+            .or_else(|| s.get(13).and_then(|v| v.as_f64()));
+        let speed_kmh = s.get(9).and_then(|v| v.as_f64()).map(|ms| ms * 3.6);
 
         if icao24.is_empty() || callsign.is_empty() || on_ground {
             return None;
@@ -86,15 +95,13 @@ fn pick_candidate(states: &[Vec<serde_json::Value>]) -> Option<Candidate> {
             icao24,
             callsign,
             eastbound: (0.0..180.0).contains(&track),
+            altitude_m,
+            speed_kmh,
         })
     })
 }
 
-fn build_label(
-    callsign: &str,
-    aircraft: &AdsbdbAircraft,
-    route: &AdsbdbFlightRoute,
-) -> String {
+fn build_label(candidate: &Candidate, aircraft: &AdsbdbAircraft, route: &AdsbdbFlightRoute) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     let model_reg: Vec<&str> = [
@@ -111,7 +118,7 @@ fn build_label(
     let flight_number = route
         .callsign_iata
         .clone()
-        .unwrap_or_else(|| callsign.to_string());
+        .unwrap_or_else(|| candidate.callsign.clone());
     let leg = match (&route.origin, &route.destination) {
         (Some(origin), Some(dest)) => match (&origin.iata_code, &dest.iata_code) {
             (Some(from), Some(to)) => format!("{} {}-{}", flight_number, from, to),
@@ -120,6 +127,18 @@ fn build_label(
         _ => flight_number,
     };
     parts.push(leg);
+
+    // Телеметрия: высота и скорость, если борт их передаёт
+    let mut telemetry: Vec<String> = Vec::new();
+    if let Some(alt) = candidate.altitude_m {
+        telemetry.push(format!("{:.0} м", (alt / 10.0).round() * 10.0));
+    }
+    if let Some(speed) = candidate.speed_kmh {
+        telemetry.push(format!("{:.0} км/ч", speed));
+    }
+    if !telemetry.is_empty() {
+        parts.push(telemetry.join(", "));
+    }
 
     parts.join(" | ")
 }
@@ -183,7 +202,7 @@ async fn fetch_flight(
     };
 
     Some(FlightLabel {
-        label: build_label(&candidate.callsign, &aircraft, &route),
+        label: build_label(&candidate, &aircraft, &route),
         eastbound: candidate.eastbound,
     })
 }
@@ -257,6 +276,16 @@ mod tests {
         assert!(!c.eastbound);
     }
 
+    fn candidate(callsign: &str, altitude_m: Option<f64>, speed_kmh: Option<f64>) -> Candidate {
+        Candidate {
+            icao24: "abc123".to_string(),
+            callsign: callsign.to_string(),
+            eastbound: true,
+            altitude_m,
+            speed_kmh,
+        }
+    }
+
     #[test]
     fn test_build_label_full() {
         let aircraft = AdsbdbAircraft {
@@ -273,8 +302,12 @@ mod tests {
             }),
         };
         assert_eq!(
-            build_label("AFL1234", &aircraft, &route),
-            "A320 RA-73756 | SU1234 SVO-LED"
+            build_label(
+                &candidate("AFL1234", Some(10668.5), Some(850.3)),
+                &aircraft,
+                &route
+            ),
+            "A320 RA-73756 | SU1234 SVO-LED | 10670 м, 850 км/ч"
         );
     }
 
@@ -282,6 +315,9 @@ mod tests {
     fn test_build_label_no_route_falls_back_to_callsign() {
         let aircraft = AdsbdbAircraft::default();
         let route = AdsbdbFlightRoute::default();
-        assert_eq!(build_label("DRU544", &aircraft, &route), "DRU544");
+        assert_eq!(
+            build_label(&candidate("DRU544", None, None), &aircraft, &route),
+            "DRU544"
+        );
     }
 }

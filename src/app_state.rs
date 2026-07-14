@@ -5,6 +5,21 @@ use crate::weather::{
 };
 use std::time::Instant;
 
+/// Румб по метеонаправлению ветра (откуда дует), 8 направлений
+pub fn wind_rumb_ru(direction_deg: f64) -> &'static str {
+    let deg = direction_deg.rem_euclid(360.0);
+    match ((deg + 22.5) / 45.0) as usize % 8 {
+        0 => "С",
+        1 => "СВ",
+        2 => "В",
+        3 => "ЮВ",
+        4 => "Ю",
+        5 => "ЮЗ",
+        6 => "З",
+        _ => "СЗ",
+    }
+}
+
 /// Русские названия погоды для HUD (локальный патч скринсейвера)
 pub fn condition_name_ru(condition: WeatherCondition) -> &'static str {
     match condition {
@@ -220,7 +235,7 @@ impl AppState {
             };
 
             format!(
-                "{} | {}Погода: {} | Темп: {:.1}{}{} | Ветер: {:.1}{} | Осадки: {:.1}{}{}{}",
+                "{} | {}Погода: {} | Темп: {:.1}{}{} | Ветер: {:.1}{} {} | Осадки: {:.1}{}{}{}",
                 clock,
                 offline_indicator,
                 self.get_condition_text(),
@@ -229,6 +244,7 @@ impl AppState {
                 apparent_temp_str,
                 wind,
                 wind_unit,
+                wind_rumb_ru(weather.wind_direction),
                 precip,
                 precip_unit,
                 location_str,
@@ -242,31 +258,45 @@ impl AppState {
             )
         };
 
-        // Вторая строка HUD: прогноз на +3/+6/+12 часов
+        // Вторая строка HUD: прогноз на +3/+6/+12 часов + ближайшее солнечное событие
         self.cached_forecast_info = if let Some(ref weather) = self.current_weather {
-            if weather.forecast.is_empty() {
+            let mut parts: Vec<String> = weather
+                .forecast
+                .iter()
+                .map(|point| {
+                    let (temp, unit) =
+                        format_temperature(point.temperature, self.units.temperature);
+                    let prob = match point.precipitation_probability {
+                        Some(p) if p >= 20 => format!(", осадки {}%", p),
+                        _ => String::new(),
+                    };
+                    format!(
+                        "+{}ч {:.0}{} {}{}",
+                        point.hours_ahead,
+                        temp,
+                        unit,
+                        condition_name_ru(point.condition),
+                        prob
+                    )
+                })
+                .collect();
+
+            // Днём показываем закат, ночью - восход
+            let sun_event = if weather.sun.is_day {
+                weather.sun.set.map(|t| format!("Закат {}", t.format("%H:%M")))
+            } else {
+                weather
+                    .sun
+                    .rise
+                    .map(|t| format!("Восход {}", t.format("%H:%M")))
+            };
+            if let Some(event) = sun_event {
+                parts.push(event);
+            }
+
+            if parts.is_empty() {
                 String::new()
             } else {
-                let parts: Vec<String> = weather
-                    .forecast
-                    .iter()
-                    .map(|point| {
-                        let (temp, unit) =
-                            format_temperature(point.temperature, self.units.temperature);
-                        let prob = match point.precipitation_probability {
-                            Some(p) if p >= 20 => format!(", осадки {}%", p),
-                            _ => String::new(),
-                        };
-                        format!(
-                            "+{}ч {:.0}{} {}{}",
-                            point.hours_ahead,
-                            temp,
-                            unit,
-                            condition_name_ru(point.condition),
-                            prob
-                        )
-                    })
-                    .collect();
                 format!("Прогноз: {}", parts.join(" | "))
             }
         } else {

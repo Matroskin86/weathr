@@ -21,6 +21,14 @@ pub struct OpenMeteoProvider {
 struct OpenMeteoResponse {
     current: CurrentWeather,
     hourly: Option<HourlyForecast>,
+    daily: Option<DailySun>,
+}
+
+/// Восход/закат на сегодня (первый элемент массивов, локальное время из timezone=auto)
+#[derive(Debug, Deserialize)]
+struct DailySun {
+    sunrise: Vec<String>,
+    sunset: Vec<String>,
 }
 
 /// Почасовые ряды open-meteo: первый элемент = текущий час (forecast_hours=13)
@@ -110,7 +118,7 @@ impl OpenMeteoProvider {
 
     fn build_url(&self, location: &WeatherLocation, units: &WeatherUnits) -> String {
         format!(
-            "{}?latitude={}&longitude={}&current=temperature_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,precipitation_probability&forecast_hours=13&temperature_unit={}&wind_speed_unit={}&precipitation_unit={}&timezone=auto",
+            "{}?latitude={}&longitude={}&current=temperature_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,precipitation_probability&forecast_hours=13&daily=sunrise,sunset&forecast_days=1&temperature_unit={}&wind_speed_unit={}&precipitation_unit={}&timezone=auto",
             self.base_url,
             location.latitude,
             location.longitude,
@@ -154,6 +162,22 @@ impl WeatherProvider for OpenMeteoProvider {
 
         let moon_phase = Some(0.5);
 
+        // Восход/закат: время после 'T' из ISO-строк daily (уже локальное, timezone=auto)
+        let parse_sun_time = |raw: Option<&String>| -> Option<chrono::NaiveTime> {
+            let time_part = raw?.split('T').nth(1)?;
+            chrono::NaiveTime::parse_from_str(time_part, "%H:%M").ok()
+        };
+        let (sun_rise, sun_set) = match data.daily.as_ref() {
+            Some(daily) => (
+                parse_sun_time(daily.sunrise.first()),
+                parse_sun_time(daily.sunset.first()),
+            ),
+            None => (None, None),
+        };
+        let mut sun = CelestialEvents::only_day(data.current.is_day);
+        sun.rise = sun_rise;
+        sun.set = sun_set;
+
         // Точки прогноза +3/+6/+12 часов из почасовых рядов (индекс 0 = текущий час)
         let forecast = data
             .hourly
@@ -190,7 +214,7 @@ impl WeatherProvider for OpenMeteoProvider {
             precipitation: normalize_precipitation(data.current.precipitation, units.precipitation),
             wind_speed: normalize_wind_speed(data.current.wind_speed_10m, units.wind_speed),
             wind_direction: data.current.wind_direction_10m,
-            sun: CelestialEvents::only_day(data.current.is_day),
+            sun,
             moon_phase,
             timestamp: data.current.time,
             attribution: self.get_attribution().to_string(),
