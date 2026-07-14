@@ -9,6 +9,7 @@ pub mod holidays;
 pub mod iss;
 pub mod leaves;
 pub mod moon;
+pub mod night_sky;
 pub mod raindrops;
 pub mod snow;
 pub mod stars;

@@ -3,8 +3,9 @@ use crate::animation::{
     airplanes::AirplaneSystem, birds::BirdSystem, cat::CatSystem, chimney::ChimneySmoke,
     clouds::CloudSystem,
     fireflies::FireflySystem, fog::FogSystem, holidays::HolidaySystem, iss::IssSystem,
-    leaves::FallingLeaves, moon::MoonSystem, raindrops::RaindropSystem, snow::SnowSystem,
-    stars::StarSystem, sunny::SunSystem, thunderstorm::ThunderstormSystem,
+    leaves::FallingLeaves, moon::MoonSystem, night_sky::NightSkySystem,
+    raindrops::RaindropSystem, snow::SnowSystem, stars::StarSystem, sunny::SunSystem,
+    thunderstorm::ThunderstormSystem,
 };
 use crate::app_state::AppState;
 use crate::render::TerminalRenderer;
@@ -31,6 +32,7 @@ impl AnimationManager {
             Box::new(CloudSystem::new(term_width, term_height)),
             Box::new(AirplaneSystem::new(term_width, term_height)),
             Box::new(IssSystem::new(term_width, term_height)),
+            Box::new(NightSkySystem::new(term_width, term_height)),
             // Post-scene
             Box::new(ChimneySmoke::new()),
             Box::new(CatSystem::new(term_width, term_height)),
