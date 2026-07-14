@@ -1,6 +1,6 @@
 mod decorations;
 mod ground;
-mod house;
+pub mod house;
 mod style;
 
 use crate::render::TerminalRenderer;

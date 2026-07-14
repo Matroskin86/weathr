@@ -1,6 +1,7 @@
 use crate::animation::{
     AnimationSystem, ChimneyPosition, FrameCommands, FrameContext, RenderLayer, TerminalSize, Wind,
-    airplanes::AirplaneSystem, birds::BirdSystem, chimney::ChimneySmoke, clouds::CloudSystem,
+    airplanes::AirplaneSystem, birds::BirdSystem, cat::CatSystem, chimney::ChimneySmoke,
+    clouds::CloudSystem,
     fireflies::FireflySystem, fog::FogSystem, iss::IssSystem, leaves::FallingLeaves,
     moon::MoonSystem, raindrops::RaindropSystem, snow::SnowSystem, stars::StarSystem,
     sunny::SunSystem, thunderstorm::ThunderstormSystem,
@@ -32,6 +33,7 @@ impl AnimationManager {
             Box::new(IssSystem::new(term_width, term_height)),
             // Post-scene
             Box::new(ChimneySmoke::new()),
+            Box::new(CatSystem::new(term_width, term_height)),
             // Foreground
             Box::new(RaindropSystem::new(
                 term_width,
