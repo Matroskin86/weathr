@@ -16,7 +16,11 @@ pub struct AppState {
     pub city_name: Option<String>,
     pub location_display: LocationDisplay,
     pub hide_location: bool,
+    pub use_feels_like_temperature: bool,
+    pub hide_quit_hint: bool,
     pub units: WeatherUnits,
+    // Минута последнего форматирования HUD: смена минуты обновляет часы в HUD
+    pub last_clock_minute: u32,
 }
 
 impl AppState {
@@ -25,6 +29,8 @@ impl AppState {
         city_name: Option<String>,
         location_display: LocationDisplay,
         hide_location: bool,
+        use_feels_like_temperature: bool,
+        hide_quit_hint: bool,
         units: WeatherUnits,
     ) -> Self {
         Self {
@@ -38,7 +44,20 @@ impl AppState {
             city_name,
             location_display,
             hide_location,
+            use_feels_like_temperature,
+            hide_quit_hint,
             units,
+            last_clock_minute: u32::MAX,
+        }
+    }
+
+    /// Раз в минуту помечает HUD на перерисовку, чтобы часы не отставали
+    pub fn tick_clock(&mut self) {
+        use chrono::Timelike;
+        let minute = chrono::Local::now().minute();
+        if minute != self.last_clock_minute {
+            self.last_clock_minute = minute;
+            self.weather_info_needs_update = true;
         }
     }
 
@@ -125,6 +144,26 @@ impl AppState {
             format!(" | Место: {}", label)
         };
 
+        // "Ощущается как": добавка к температуре, если включено в конфиге
+        let apparent_temp_str = if let Some(ref weather) = self.current_weather {
+            if self.use_feels_like_temperature {
+                let (apparent_temp, apparent_temp_unit) =
+                    format_temperature(weather.feels_like_temperature, self.units.temperature);
+                format!(" (ощущается {:.1}{})", apparent_temp, apparent_temp_unit)
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        let clock = chrono::Local::now().format("%H:%M");
+        let quit_hint = if self.hide_quit_hint {
+            ""
+        } else {
+            " | Выход: 'q'"
+        };
+
         self.cached_weather_info = if let Some(ref weather) = self.current_weather {
             let (temp, temp_unit) = format_temperature(weather.temperature, self.units.temperature);
             let (wind, wind_unit) = format_wind_speed(weather.wind_speed, self.units.wind_speed);
@@ -134,19 +173,26 @@ impl AppState {
             let offline_indicator = if self.is_offline { "ОФФЛАЙН | " } else { "" };
 
             format!(
-                "{}Погода: {} | Темп: {:.1}{} | Ветер: {:.1}{} | Осадки: {:.1}{}{} | Выход: 'q'",
+                "{} | {}Погода: {} | Темп: {:.1}{}{} | Ветер: {:.1}{} | Осадки: {:.1}{}{}{}",
+                clock,
                 offline_indicator,
                 self.get_condition_text(),
                 temp,
                 temp_unit,
+                apparent_temp_str,
                 wind,
                 wind_unit,
                 precip,
                 precip_unit,
-                location_str
+                location_str,
+                quit_hint
             )
         } else {
-            format!("Погода: загрузка... {}", self.loading_state.current_char())
+            format!(
+                "{} | Погода: загрузка... {}",
+                clock,
+                self.loading_state.current_char()
+            )
         };
 
         self.weather_info_needs_update = false;
@@ -252,11 +298,12 @@ mod tests {
             wind_speed: WindSpeedUnit::Kmh,
             precipitation: PrecipitationUnit::Mm,
         };
-        let mut app = AppState::new(location, city, display, false, units);
+        let mut app = AppState::new(location, city, display, false, false, false, units);
 
         let weather = WeatherData {
             condition: WeatherCondition::Clear,
             temperature: 20.0,
+            feels_like_temperature: 20.0,
             precipitation: 0.0,
             wind_speed: 10.0,
             wind_direction: 0.0,

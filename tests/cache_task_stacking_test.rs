@@ -19,6 +19,7 @@ async fn test_cache_task_stacking_under_slow_io() {
     let weather = WeatherData {
         condition: WeatherCondition::Clear,
         temperature: 20.0,
+        feels_like_temperature: 20.0,
         precipitation: 0.0,
         wind_speed: 5.0,
         wind_direction: 180.0,
