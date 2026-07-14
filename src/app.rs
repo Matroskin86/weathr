@@ -133,6 +133,8 @@ pub struct App {
     active_overlay_id: Option<&'static str>,
     weather_receiver: mpsc::Receiver<Result<WeatherData, WeatherError>>,
     hide_hud: bool,
+    // Координаты и провайдер для чтения устаревшего кэша в оффлайне (None при симуляции)
+    offline_lookup: Option<(f64, f64, Provider)>,
 }
 
 impl App {
@@ -169,6 +171,22 @@ impl App {
         let bindings = resolve_theme_bindings(&themes, &scenes, &overlays);
 
         let (tx, rx) = mpsc::channel(1);
+
+        let wanted_provider = config
+            .provider
+            .keys()
+            .next()
+            .cloned()
+            .unwrap_or(Provider::default());
+        let offline_lookup = if simulate_condition.is_none() {
+            Some((
+                config.location.latitude,
+                config.location.longitude,
+                wanted_provider,
+            ))
+        } else {
+            None
+        };
 
         if let Some(ref condition_str) = simulate_condition {
             let simulated_condition =
@@ -211,12 +229,6 @@ impl App {
             animations.update_snow_intensity(snow_intensity);
             animations.update_wind(wind_speed as f32, wind_direction as f32);
         } else {
-            let wanted_provider = config
-                .provider
-                .keys()
-                .next()
-                .cloned()
-                .unwrap_or(Provider::default());
 
             let provider: Arc<dyn WeatherProvider> = match wanted_provider {
                 Provider::OpenMeteo => Arc::new(OpenMeteoProvider::new()),
@@ -258,12 +270,13 @@ impl App {
             active_overlay_id: bindings.overlay_id,
             weather_receiver: rx,
             hide_hud: config.hide_hud,
+            offline_lookup,
         }
     }
 
     pub async fn run(&mut self, renderer: &mut TerminalRenderer) -> io::Result<()> {
         let mut rng = rand::rng();
-        let mut attribution = "Awaiting weather data".to_string();
+        let mut attribution = "Ожидание данных о погоде".to_string();
 
         loop {
             match self.weather_receiver.try_recv() {
@@ -294,24 +307,56 @@ impl App {
                         };
 
                         if self.state.current_weather.is_none() {
-                            attribution = format!("Provider failed with {error_msg} - Simulating");
-                            let offline_weather = generate_offline_weather(&mut rng);
+                            // Честный оффлайн: сперва пробуем устаревший кэш с реальными
+                            // данными, случайная симуляция - только когда кэша нет вовсе
+                            let stale = match self.offline_lookup {
+                                Some((lat, lon, provider)) => {
+                                    crate::cache::load_stale_weather(lat, lon, provider).await
+                                }
+                                None => None,
+                            };
+
+                            let (offline_weather, cached_at) = match stale {
+                                Some((weather, cached_at)) => {
+                                    attribution = format!(
+                                        "Сеть недоступна ({error_msg}) - показаны сохранённые данные"
+                                    );
+                                    (weather, Some(cached_at))
+                                }
+                                None => {
+                                    attribution =
+                                        format!("Сеть недоступна ({error_msg}) - симуляция");
+                                    (generate_offline_weather(&mut rng), None)
+                                }
+                            };
+
                             let rain_intensity = offline_weather.condition.rain_intensity();
                             let snow_intensity = offline_weather.condition.snow_intensity();
                             let fog_intensity = offline_weather.condition.fog_intensity();
                             let wind_speed = offline_weather.wind_speed;
                             let wind_direction = offline_weather.wind_direction;
+                            let moon_phase = offline_weather.moon_phase;
 
                             self.state.update_weather(offline_weather);
-                            self.state.set_offline_mode(true);
+                            match cached_at {
+                                Some(ts) => self.state.set_offline_with_data_age(ts),
+                                None => self.state.set_offline_mode(true),
+                            }
+                            if let Some(phase) = moon_phase {
+                                self.animations.update_moon_phase(phase);
+                            }
                             self.animations.update_rain_intensity(rain_intensity);
                             self.animations.update_snow_intensity(snow_intensity);
                             self.animations.update_fog_intensity(fog_intensity);
                             self.animations
                                 .update_wind(wind_speed as f32, wind_direction as f32);
                         } else {
-                            self.state.set_offline_mode(true);
-                            attribution = format!("Provider failed with {error_msg}");
+                            // Данные уже были: оставляем их, возраст - от последнего успеха
+                            match self.state.last_success_at {
+                                Some(ts) => self.state.set_offline_with_data_age(ts),
+                                None => self.state.set_offline_mode(true),
+                            }
+                            attribution = format!("Сеть недоступна ({error_msg})");
                         }
                     }
                 },

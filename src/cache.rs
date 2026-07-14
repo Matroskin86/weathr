@@ -174,6 +174,22 @@ pub fn save_geocode_cache(city_name: &str, latitude: f64, longitude: f64, langua
     ));
 }
 
+/// Читает погодный кэш БЕЗ проверки срока годности - для честного оффлайна:
+/// лучше показать старые настоящие данные с возрастом, чем случайную погоду.
+/// Возвращает данные и unix-время их сохранения.
+pub async fn load_stale_weather(
+    latitude: f64,
+    longitude: f64,
+    provider: Provider,
+) -> Option<(WeatherData, u64)> {
+    let location_key = make_location_key(latitude, longitude);
+    let filename = format!("weather_{}_{:?}.json", location_key, provider);
+    let cache_path = get_cache_dir()?.join(filename);
+    let contents = fs::read_to_string(&cache_path).await.ok()?;
+    let cache: WeatherCache = serde_json::from_str(&contents).ok()?;
+    Some((cache.data, cache.cached_at))
+}
+
 pub async fn load_cached_weather(
     latitude: f64,
     longitude: f64,

@@ -42,6 +42,27 @@ pub struct AppState {
     pub units: WeatherUnits,
     // Минута последнего форматирования HUD: смена минуты обновляет часы в HUD
     pub last_clock_minute: u32,
+    // Unix-время данных, показываемых в оффлайне (для подписи возраста в HUD)
+    pub offline_data_cached_at: Option<u64>,
+    // Unix-время последнего успешного обновления погоды
+    pub last_success_at: Option<u64>,
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Возраст данных для оффлайн-подписи: "N мин назад" / "N ч назад"
+fn format_age(age_secs: u64) -> String {
+    let minutes = age_secs / 60;
+    if minutes < 120 {
+        format!("{} мин назад", minutes.max(1))
+    } else {
+        format!("{} ч назад", minutes / 60)
+    }
 }
 
 impl AppState {
@@ -70,6 +91,8 @@ impl AppState {
             hide_quit_hint,
             units,
             last_clock_minute: u32::MAX,
+            offline_data_cached_at: None,
+            last_success_at: None,
         }
     }
 
@@ -94,7 +117,15 @@ impl AppState {
 
         self.current_weather = Some(weather);
         self.is_offline = false;
+        self.offline_data_cached_at = None;
+        self.last_success_at = Some(unix_now());
         self.weather_info_needs_update = true;
+    }
+
+    /// Оффлайн с сохранёнными данными: показываем их возраст в HUD
+    pub fn set_offline_with_data_age(&mut self, cached_at: u64) {
+        self.offline_data_cached_at = Some(cached_at);
+        self.set_offline_mode(true);
     }
 
     pub fn set_offline_mode(&mut self, offline: bool) {
@@ -176,7 +207,17 @@ impl AppState {
             let (precip, precip_unit) =
                 format_precipitation(weather.precipitation, self.units.precipitation);
 
-            let offline_indicator = if self.is_offline { "ОФФЛАЙН | " } else { "" };
+            let offline_indicator = if self.is_offline {
+                match self.offline_data_cached_at {
+                    Some(cached_at) => {
+                        let age = unix_now().saturating_sub(cached_at);
+                        format!("ОФФЛАЙН (данные {}) | ", format_age(age))
+                    }
+                    None => "ОФФЛАЙН (симуляция) | ".to_string(),
+                }
+            } else {
+                String::new()
+            };
 
             format!(
                 "{} | {}Погода: {} | Темп: {:.1}{}{} | Ветер: {:.1}{} | Осадки: {:.1}{}{}{}",
