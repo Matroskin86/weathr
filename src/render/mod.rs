@@ -52,7 +52,19 @@ impl TerminalRenderer {
             return Err(TerminalError::NotATty);
         }
 
-        let (width, height) = terminal::size().map_err(TerminalError::SizeError)?;
+        // Под ttyd/веб-терминалом pty на старте бывает 0x0: клиент присылает
+        // реальный размер чуть позже спавна. Ждём до 3 секунд вместо мгновенного
+        // выхода (локальный патч скринсейвера).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let (mut width, mut height) = terminal::size().map_err(TerminalError::SizeError)?;
+        while (width < MIN_TERMINAL_WIDTH || height < MIN_TERMINAL_HEIGHT)
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let size = terminal::size().map_err(TerminalError::SizeError)?;
+            width = size.0;
+            height = size.1;
+        }
 
         if width < MIN_TERMINAL_WIDTH || height < MIN_TERMINAL_HEIGHT {
             return Err(TerminalError::TooSmall {
