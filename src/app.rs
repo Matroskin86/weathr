@@ -119,6 +119,7 @@ fn generate_offline_weather(rng: &mut impl rand::Rng) -> WeatherData {
         moon_phase: Some(0.5),
         timestamp: now.format("%Y-%m-%dT%H:%M:%S").to_string(),
         attribution: "".to_string(),
+        forecast: Vec::new(),
     }
 }
 
@@ -197,6 +198,7 @@ impl App {
                 moon_phase: Some(0.5),
                 timestamp: "simulated".to_string(),
                 attribution: "".to_string(),
+                forecast: Vec::new(),
             };
 
             let rain_intensity = weather.condition.rain_intensity();
@@ -382,6 +384,14 @@ impl App {
                     &self.state.cached_weather_info,
                     crossterm::style::Color::Cyan,
                 )?;
+                if !self.state.cached_forecast_info.is_empty() {
+                    renderer.render_line_colored(
+                        2,
+                        2,
+                        &self.state.cached_forecast_info,
+                        crossterm::style::Color::DarkCyan,
+                    )?;
+                }
             }
 
             let attribution_x = if term_width > attribution.len() as u16 {

@@ -20,6 +20,15 @@ pub struct OpenMeteoProvider {
 #[derive(Debug, Deserialize)]
 struct OpenMeteoResponse {
     current: CurrentWeather,
+    hourly: Option<HourlyForecast>,
+}
+
+/// Почасовые ряды open-meteo: первый элемент = текущий час (forecast_hours=13)
+#[derive(Debug, Deserialize)]
+struct HourlyForecast {
+    temperature_2m: Vec<f64>,
+    weather_code: Vec<f64>,
+    precipitation_probability: Option<Vec<Option<i32>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,7 +110,7 @@ impl OpenMeteoProvider {
 
     fn build_url(&self, location: &WeatherLocation, units: &WeatherUnits) -> String {
         format!(
-            "{}?latitude={}&longitude={}&current=temperature_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m&temperature_unit={}&wind_speed_unit={}&precipitation_unit={}&timezone=auto",
+            "{}?latitude={}&longitude={}&current=temperature_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,weather_code,precipitation_probability&forecast_hours=13&temperature_unit={}&wind_speed_unit={}&precipitation_unit={}&timezone=auto",
             self.base_url,
             location.latitude,
             location.longitude,
@@ -145,7 +154,33 @@ impl WeatherProvider for OpenMeteoProvider {
 
         let moon_phase = Some(0.5);
 
+        // Точки прогноза +3/+6/+12 часов из почасовых рядов (индекс 0 = текущий час)
+        let forecast = data
+            .hourly
+            .as_ref()
+            .map(|hourly| {
+                [3usize, 6, 12]
+                    .iter()
+                    .filter_map(|&idx| {
+                        let temperature = *hourly.temperature_2m.get(idx)?;
+                        let weather_code = *hourly.weather_code.get(idx)? as i32;
+                        let precipitation_probability = hourly
+                            .precipitation_probability
+                            .as_ref()
+                            .and_then(|probs| probs.get(idx).copied().flatten());
+                        Some(crate::weather::provider::RawForecastPoint {
+                            hours_ahead: idx as u8,
+                            temperature: normalize_temperature(temperature, units.temperature),
+                            weather_code,
+                            precipitation_probability,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(WeatherProviderResponse {
+            forecast,
             weather_code: data.current.weather_code,
             temperature: normalize_temperature(data.current.temperature_2m, units.temperature),
             feels_like_temperature: normalize_temperature(

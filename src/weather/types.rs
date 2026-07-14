@@ -203,6 +203,15 @@ pub enum PrecipitationUnit {
     Inch,
 }
 
+/// Точка почасового прогноза для HUD (смещение в часах от текущего момента)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ForecastPoint {
+    pub hours_ahead: u8,
+    pub temperature: f64,
+    pub condition: WeatherCondition,
+    pub precipitation_probability: Option<i32>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WeatherData {
     pub condition: WeatherCondition,
@@ -215,6 +224,9 @@ pub struct WeatherData {
     pub moon_phase: Option<f64>,
     pub timestamp: String,
     pub attribution: String,
+    // default: старые кэши без прогноза остаются читаемыми
+    #[serde(default)]
+    pub forecast: Vec<ForecastPoint>,
 }
 
 #[derive(Debug, Clone, Copy, serde::Deserialize)]

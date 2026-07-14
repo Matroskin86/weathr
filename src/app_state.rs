@@ -5,12 +5,33 @@ use crate::weather::{
 };
 use std::time::Instant;
 
+/// Русские названия погоды для HUD (локальный патч скринсейвера)
+pub fn condition_name_ru(condition: WeatherCondition) -> &'static str {
+    match condition {
+        WeatherCondition::Clear => "Ясно",
+        WeatherCondition::Cloudy => "Облачно",
+        WeatherCondition::PartlyCloudy => "Переменная облачность",
+        WeatherCondition::Overcast => "Пасмурно",
+        WeatherCondition::Fog => "Туман",
+        WeatherCondition::Drizzle => "Морось",
+        WeatherCondition::FreezingRain => "Ледяной дождь",
+        WeatherCondition::Rain => "Дождь",
+        WeatherCondition::Snow => "Снег",
+        WeatherCondition::SnowGrains => "Снежная крупа",
+        WeatherCondition::RainShowers => "Ливень",
+        WeatherCondition::SnowShowers => "Снегопад",
+        WeatherCondition::Thunderstorm => "Гроза",
+        WeatherCondition::ThunderstormHail => "Гроза с градом",
+    }
+}
+
 pub struct AppState {
     pub current_weather: Option<WeatherData>,
     pub is_offline: bool,
     pub weather_conditions: WeatherConditions,
     pub loading_state: LoadingState,
     pub cached_weather_info: String,
+    pub cached_forecast_info: String,
     pub weather_info_needs_update: bool,
     pub location: WeatherLocation,
     pub city_name: Option<String>,
@@ -39,6 +60,7 @@ impl AppState {
             weather_conditions: WeatherConditions::default(),
             loading_state: LoadingState::new(),
             cached_weather_info: String::new(),
+            cached_forecast_info: String::new(),
             weather_info_needs_update: true,
             location,
             city_name,
@@ -89,23 +111,7 @@ impl AppState {
 
     pub fn get_condition_text(&self) -> &str {
         if let Some(ref weather) = self.current_weather {
-            // Русские названия погоды для HUD (локальный патч скринсейвера)
-            match weather.condition {
-                WeatherCondition::Clear => "Ясно",
-                WeatherCondition::Cloudy => "Облачно",
-                WeatherCondition::PartlyCloudy => "Переменная облачность",
-                WeatherCondition::Overcast => "Пасмурно",
-                WeatherCondition::Fog => "Туман",
-                WeatherCondition::Drizzle => "Морось",
-                WeatherCondition::FreezingRain => "Ледяной дождь",
-                WeatherCondition::Rain => "Дождь",
-                WeatherCondition::Snow => "Снег",
-                WeatherCondition::SnowGrains => "Снежная крупа",
-                WeatherCondition::RainShowers => "Ливень",
-                WeatherCondition::SnowShowers => "Снегопад",
-                WeatherCondition::Thunderstorm => "Гроза",
-                WeatherCondition::ThunderstormHail => "Гроза с градом",
-            }
+            condition_name_ru(weather.condition)
         } else {
             "Загрузка"
         }
@@ -193,6 +199,37 @@ impl AppState {
                 clock,
                 self.loading_state.current_char()
             )
+        };
+
+        // Вторая строка HUD: прогноз на +3/+6/+12 часов
+        self.cached_forecast_info = if let Some(ref weather) = self.current_weather {
+            if weather.forecast.is_empty() {
+                String::new()
+            } else {
+                let parts: Vec<String> = weather
+                    .forecast
+                    .iter()
+                    .map(|point| {
+                        let (temp, unit) =
+                            format_temperature(point.temperature, self.units.temperature);
+                        let prob = match point.precipitation_probability {
+                            Some(p) if p >= 20 => format!(", осадки {}%", p),
+                            _ => String::new(),
+                        };
+                        format!(
+                            "+{}ч {:.0}{} {}{}",
+                            point.hours_ahead,
+                            temp,
+                            unit,
+                            condition_name_ru(point.condition),
+                            prob
+                        )
+                    })
+                    .collect();
+                format!("Прогноз: {}", parts.join(" | "))
+            }
+        } else {
+            String::new()
         };
 
         self.weather_info_needs_update = false;
@@ -310,6 +347,7 @@ mod tests {
             moon_phase: Some(0.5),
             timestamp: "2024-01-01T12:00:00Z".to_string(),
             attribution: "".to_string(),
+            forecast: Vec::new(),
             sun: CelestialEvents::from_bool(true),
         };
         app.update_weather(weather);

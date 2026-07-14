@@ -27,6 +27,7 @@ async fn test_cache_task_stacking_under_slow_io() {
         moon_phase: Some(0.5),
         timestamp: "2026-05-11T12:00:00Z".to_string(),
         attribution: "Test".to_string(),
+        forecast: Vec::new(),
     };
 
     // Flood the cache with saves faster than async I/O can handle

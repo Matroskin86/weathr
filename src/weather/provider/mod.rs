@@ -7,6 +7,15 @@ pub mod met_office;
 pub mod open_meteo;
 pub mod supplementary;
 
+/// Сырая точка прогноза от провайдера (код погоды ещё не превращён в условие)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawForecastPoint {
+    pub hours_ahead: u8,
+    pub temperature: f64,
+    pub weather_code: i32,
+    pub precipitation_probability: Option<i32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WeatherProviderResponse {
     pub weather_code: i32,
@@ -19,6 +28,8 @@ pub struct WeatherProviderResponse {
     pub moon_phase: Option<f64>,
     pub timestamp: String,
     pub attribution: String,
+    #[serde(default)]
+    pub forecast: Vec<RawForecastPoint>,
 }
 
 #[async_trait]

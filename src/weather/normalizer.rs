@@ -7,6 +7,17 @@ impl WeatherNormalizer {
     pub fn normalize(response: WeatherProviderResponse) -> WeatherData {
         let condition = Self::wmo_code_to_condition(response.weather_code);
 
+        let forecast = response
+            .forecast
+            .iter()
+            .map(|point| crate::weather::types::ForecastPoint {
+                hours_ahead: point.hours_ahead,
+                temperature: point.temperature,
+                condition: Self::wmo_code_to_condition(point.weather_code),
+                precipitation_probability: point.precipitation_probability,
+            })
+            .collect();
+
         WeatherData {
             condition,
             temperature: response.temperature,
@@ -18,6 +29,7 @@ impl WeatherNormalizer {
             moon_phase: response.moon_phase,
             timestamp: response.timestamp,
             attribution: response.attribution,
+            forecast,
         }
     }
 
@@ -106,6 +118,7 @@ mod tests {
             moon_phase: Some(0.5),
             timestamp: "2024-01-01T12:00".to_string(),
             attribution: "".to_string(),
+            forecast: Vec::new(),
         };
 
         let data = WeatherNormalizer::normalize(response);

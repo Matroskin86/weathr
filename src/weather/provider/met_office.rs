@@ -186,6 +186,8 @@ impl WeatherProvider for MetOfficeProvider {
         };
 
         let mut current_weather = WeatherProviderResponse {
+            // Met Office пока без почасового прогноза для HUD
+            forecast: Vec::new(),
             weather_code: current_weather.significant_weather_code,
             temperature: current_weather.normalize_temperature(
                 units,
