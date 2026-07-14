@@ -160,7 +160,7 @@ impl WeatherProvider for OpenMeteoProvider {
             .await
             .map_err(|e| WeatherError::Network(NetworkError::from_reqwest(e, &url, 30)))?;
 
-        let moon_phase = Some(0.5);
+        let moon_phase = Some(crate::weather::moonphase::current_moon_phase());
 
         // Восход/закат: время после 'T' из ISO-строк daily (уже локальное, timezone=auto)
         let parse_sun_time = |raw: Option<&String>| -> Option<chrono::NaiveTime> {

@@ -203,7 +203,9 @@ async fn main() -> io::Result<()> {
         &config,
         cli.simulate,
         cli.night,
-        cli.leaves,
+        // В демо листопад включён: видно охоту кота на листья
+        cli.leaves || cli.demo,
+        cli.demo,
         term_width,
         term_height,
         theme_registry,

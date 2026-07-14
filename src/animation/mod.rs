@@ -5,6 +5,7 @@ pub mod chimney;
 pub mod clouds;
 pub mod fireflies;
 pub mod fog;
+pub mod holidays;
 pub mod iss;
 pub mod leaves;
 pub mod moon;

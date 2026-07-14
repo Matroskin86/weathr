@@ -50,6 +50,12 @@ pub struct Cli {
     #[arg(short, long, help = "Enable falling autumn leaves")]
     pub leaves: bool,
 
+    #[arg(
+        long,
+        help = "Демо-режим: все пасхалки сразу (гирлянда, ракета, салют, МКС, самолёт), кот живёт быстрее"
+    )]
+    pub demo: bool,
+
     #[arg(long, help = "Auto-detect location via IP (uses ipinfo.io)")]
     pub auto_location: bool,
 

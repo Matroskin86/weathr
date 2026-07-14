@@ -63,6 +63,8 @@ pub trait AnimationSystem {
     fn on_flights_mode(&mut self, _real_only: bool) {}
     /// МКС вошла в зону видимости - запустить пролёт станции
     fn on_iss_pass(&mut self, _label: &str) {}
+    /// Демо-режим: показать все пасхалки и ускорить события
+    fn on_demo_mode(&mut self, _demo: bool) {}
 
     fn update(&mut self, ctx: &FrameContext<'_>, rng: &mut dyn Rng, commands: &mut FrameCommands);
     fn render(&mut self, renderer: &mut TerminalRenderer, ctx: &FrameContext<'_>)

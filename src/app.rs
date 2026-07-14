@@ -139,6 +139,9 @@ pub struct App {
     flights_receiver: Option<mpsc::Receiver<crate::flights::FlightLabel>>,
     // Канал пролётов МКС (None, если iss выключен)
     iss_receiver: Option<mpsc::Receiver<crate::flights::IssPass>>,
+    // Демо-режим: периодически спавнить показательные борт и МКС
+    demo: bool,
+    demo_frame: u64,
 }
 
 impl App {
@@ -147,6 +150,7 @@ impl App {
         simulate_condition: Option<String>,
         simulate_night: bool,
         show_leaves: bool,
+        demo: bool,
         term_width: u16,
         term_height: u16,
         themes: ThemeRegistry,
@@ -277,6 +281,10 @@ impl App {
             None
         };
 
+        if demo {
+            animations.set_demo_mode(true);
+        }
+
         let iss_receiver = if config.iss.enabled && simulate_condition.is_none() {
             Some(crate::flights::spawn_iss_watcher(
                 config.location.latitude,
@@ -301,6 +309,8 @@ impl App {
             offline_lookup,
             flights_receiver,
             iss_receiver,
+            demo,
+            demo_frame: 0,
             frame_duration: {
                 // 0 (Default::default без конфига) трактуем как штатные 30 fps
                 let fps = if config.fps == 0 {
@@ -419,6 +429,22 @@ impl App {
                 && let Ok(pass) = iss_rx.try_recv()
             {
                 self.animations.spawn_iss_pass(&pass.label);
+            }
+
+            // Демо: показательный борт на 5-й секунде и МКС на 20-й, повтор каждые 2 минуты
+            if self.demo {
+                self.demo_frame += 1;
+                let cycle = self.demo_frame % 1800;
+                if cycle == 75 {
+                    self.animations.spawn_real_flight(
+                        "A320 RA-73756 | SU1234 SVO-LED | 10600 м, 850 км/ч",
+                        true,
+                    );
+                }
+                if cycle == 300 {
+                    self.animations
+                        .spawn_iss_pass("МКС | ~27600 км/ч | «Поехали!» - Гагарин");
+                }
             }
 
             renderer.clear()?;

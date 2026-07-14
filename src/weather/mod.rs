@@ -2,6 +2,7 @@ pub mod client;
 pub mod normalizer;
 pub mod provider;
 pub mod types;
+pub mod moonphase;
 pub mod units;
 
 pub use client::WeatherClient;
