@@ -45,6 +45,39 @@ pub struct Config {
     /// Реальные самолёты над локацией (OpenSky + adsbdb)
     #[serde(default)]
     pub flights: FlightsConfig,
+    /// Пролёты МКС над локацией (open-notify)
+    #[serde(default)]
+    pub iss: IssConfig,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct IssConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Период проверки позиции МКС в секундах
+    #[serde(default = "default_iss_poll_secs")]
+    pub poll_secs: u64,
+    /// Полурадиус зоны видимости в градусах широты
+    #[serde(default = "default_iss_radius_deg")]
+    pub radius_deg: f64,
+}
+
+fn default_iss_poll_secs() -> u64 {
+    120
+}
+
+fn default_iss_radius_deg() -> f64 {
+    6.0
+}
+
+impl Default for IssConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            poll_secs: default_iss_poll_secs(),
+            radius_deg: default_iss_radius_deg(),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -411,6 +444,7 @@ longitude = 0.0
             hide_quit_hint: false,
             fps: 30,
             flights: FlightsConfig::default(),
+            iss: IssConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -438,6 +472,7 @@ longitude = 0.0
             hide_quit_hint: false,
             fps: 30,
             flights: FlightsConfig::default(),
+            iss: IssConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -465,6 +500,7 @@ longitude = 0.0
             hide_quit_hint: false,
             fps: 30,
             flights: FlightsConfig::default(),
+            iss: IssConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -492,6 +528,7 @@ longitude = 0.0
             hide_quit_hint: false,
             fps: 30,
             flights: FlightsConfig::default(),
+            iss: IssConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -519,6 +556,7 @@ longitude = 0.0
             hide_quit_hint: false,
             fps: 30,
             flights: FlightsConfig::default(),
+            iss: IssConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),

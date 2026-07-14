@@ -137,6 +137,8 @@ pub struct App {
     frame_duration: Duration,
     // Канал с реальными бортами из OpenSky (None, если flights выключены)
     flights_receiver: Option<mpsc::Receiver<crate::flights::FlightLabel>>,
+    // Канал пролётов МКС (None, если iss выключен)
+    iss_receiver: Option<mpsc::Receiver<crate::flights::IssPass>>,
 }
 
 impl App {
@@ -275,6 +277,17 @@ impl App {
             None
         };
 
+        let iss_receiver = if config.iss.enabled && simulate_condition.is_none() {
+            Some(crate::flights::spawn_iss_watcher(
+                config.location.latitude,
+                config.location.longitude,
+                config.iss.radius_deg,
+                config.iss.poll_secs,
+            ))
+        } else {
+            None
+        };
+
         Self {
             state,
             animations,
@@ -287,6 +300,7 @@ impl App {
             hide_hud: config.hide_hud,
             offline_lookup,
             flights_receiver,
+            iss_receiver,
             frame_duration: {
                 // 0 (Default::default без конфига) трактуем как штатные 30 fps
                 let fps = if config.fps == 0 {
@@ -398,6 +412,13 @@ impl App {
             {
                 self.animations
                     .spawn_real_flight(&flight.label, flight.eastbound);
+            }
+
+            // МКС вошла в зону - пролёт станции
+            if let Some(ref mut iss_rx) = self.iss_receiver
+                && let Ok(pass) = iss_rx.try_recv()
+            {
+                self.animations.spawn_iss_pass(&pass.label);
             }
 
             renderer.clear()?;

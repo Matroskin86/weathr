@@ -11,6 +11,15 @@ use tokio::sync::mpsc;
 
 const OPENSKY_URL: &str = "https://opensky-network.org/api/states/all";
 const ADSBDB_URL: &str = "https://api.adsbdb.com/v0";
+const ISS_URL: &str = "http://api.open-notify.org/iss-now.json";
+
+/// Ностальгические подписи к пролёту МКС
+const ISS_PHRASES: [&str; 4] = [
+    "«Поехали!» - Гагарин",
+    "Земля в иллюминаторе",
+    "Через тернии - к звёздам",
+    "108 минут вокруг Земли",
+];
 
 /// Готовый к показу борт: подпись для экрана и направление полёта
 #[derive(Debug, Clone)]
@@ -205,6 +214,77 @@ async fn fetch_flight(
         label: build_label(&candidate, &aircraft, &route),
         eastbound: candidate.eastbound,
     })
+}
+
+#[derive(Debug, Deserialize)]
+struct IssNowResponse {
+    iss_position: Option<IssPosition>,
+}
+
+#[derive(Debug, Deserialize)]
+struct IssPosition {
+    latitude: String,
+    longitude: String,
+}
+
+/// МКС над локацией: подпись с ностальгической фразой
+#[derive(Debug, Clone)]
+pub struct IssPass {
+    pub label: String,
+}
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Фоновый опрос позиции МКС (open-notify): когда станция входит в зону
+/// вокруг локации - шлёт событие пролёта. После срабатывания пауза 30 минут,
+/// чтобы один пролёт не спавнил станцию повторно.
+pub fn spawn_iss_watcher(lat: f64, lon: f64, radius_deg: f64, poll_secs: u64) -> mpsc::Receiver<IssPass> {
+    let (tx, rx) = mpsc::channel(1);
+
+    tokio::spawn(async move {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .user_agent("weathr-screensaver")
+            .build()
+            .unwrap_or_default();
+
+        loop {
+            let in_zone = async {
+                let data: IssNowResponse =
+                    client.get(ISS_URL).send().await.ok()?.json().await.ok()?;
+                let pos = data.iss_position?;
+                let iss_lat: f64 = pos.latitude.parse().ok()?;
+                let iss_lon: f64 = pos.longitude.parse().ok()?;
+                // Зона видимости: по долготе шире из-за сжатия меридианов
+                let visible = (iss_lat - lat).abs() < radius_deg
+                    && (iss_lon - lon).abs() < radius_deg * 1.6;
+                Some(visible)
+            }
+            .await
+            .unwrap_or(false);
+
+            if in_zone {
+                let phrase = ISS_PHRASES[(unix_now_secs() / 60) as usize % ISS_PHRASES.len()];
+                let pass = IssPass {
+                    label: format!("МКС | ~27600 км/ч | {}", phrase),
+                };
+                if tx.send(pass).await.is_err() {
+                    break;
+                }
+                // Пролёт уже показан - ждём следующего витка
+                tokio::time::sleep(Duration::from_secs(1800)).await;
+            } else {
+                tokio::time::sleep(Duration::from_secs(poll_secs.max(60))).await;
+            }
+        }
+    });
+
+    rx
 }
 
 /// Фоновый опрос неба: раз в poll_secs шлёт в канал реальный борт из радиуса

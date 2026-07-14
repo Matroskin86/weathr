@@ -1,9 +1,9 @@
 use crate::animation::{
     AnimationSystem, ChimneyPosition, FrameCommands, FrameContext, RenderLayer, TerminalSize, Wind,
     airplanes::AirplaneSystem, birds::BirdSystem, chimney::ChimneySmoke, clouds::CloudSystem,
-    fireflies::FireflySystem, fog::FogSystem, leaves::FallingLeaves, moon::MoonSystem,
-    raindrops::RaindropSystem, snow::SnowSystem, stars::StarSystem, sunny::SunSystem,
-    thunderstorm::ThunderstormSystem,
+    fireflies::FireflySystem, fog::FogSystem, iss::IssSystem, leaves::FallingLeaves,
+    moon::MoonSystem, raindrops::RaindropSystem, snow::SnowSystem, stars::StarSystem,
+    sunny::SunSystem, thunderstorm::ThunderstormSystem,
 };
 use crate::app_state::AppState;
 use crate::render::TerminalRenderer;
@@ -29,6 +29,7 @@ impl AnimationManager {
             Box::new(BirdSystem::new(term_width, term_height)),
             Box::new(CloudSystem::new(term_width, term_height)),
             Box::new(AirplaneSystem::new(term_width, term_height)),
+            Box::new(IssSystem::new(term_width, term_height)),
             // Post-scene
             Box::new(ChimneySmoke::new()),
             // Foreground
@@ -105,6 +106,12 @@ impl AnimationManager {
     pub fn spawn_real_flight(&mut self, label: &str, eastbound: bool) {
         for system in &mut self.systems {
             system.on_real_flight(label, eastbound);
+        }
+    }
+
+    pub fn spawn_iss_pass(&mut self, label: &str) {
+        for system in &mut self.systems {
+            system.on_iss_pass(label);
         }
     }
 
