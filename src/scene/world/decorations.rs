@@ -89,7 +89,8 @@ impl Decorations {
         style: &WorldSceneStyle,
     ) -> io::Result<()> {
         let pine_x = layout.house_x + layout.house_width + 18;
-        if pine_x + 10 >= layout.width {
+        // Ёлке хватает её реальной ширины (9), запас в 10 отсекал её на 120 колонках
+        if pine_x + 9 > layout.width {
             return Ok(());
         }
         let line_count = PINE_TREE_ASCII.lines().count() as u16;

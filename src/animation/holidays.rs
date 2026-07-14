@@ -102,7 +102,7 @@ impl HolidaySystem {
     fn pine_position(&self, horizon_y: u16) -> Option<(i16, i16)> {
         let house_x = (self.terminal_width / 2).saturating_sub(House::WIDTH / 2);
         let pine_x = house_x + House::WIDTH + 18;
-        if pine_x + 10 >= self.terminal_width {
+        if pine_x + 9 > self.terminal_width {
             return None;
         }
         Some((pine_x as i16, horizon_y as i16 - 5))
