@@ -186,9 +186,12 @@ impl CloudSystem {
 
     pub fn render(&self, renderer: &mut TerminalRenderer) -> io::Result<()> {
         for cloud in &self.clouds {
+            // floor вместо усечения к нулю: у левого края (x около 0) облако
+            // не дёргается на клетку вправо (issue #60)
+            let x = cloud.x.floor() as i16;
+
             for (i, line) in cloud.shape.iter().enumerate() {
                 let y = cloud.y as i16 + i as i16;
-                let x = cloud.x as i16;
 
                 if y < 0 || y >= self.terminal_height as i16 {
                     continue;
@@ -196,14 +199,18 @@ impl CloudSystem {
 
                 let clip = ((-x).max(0)) as usize;
                 let visible = &line[clip.min(line.len())..];
+                let start_x = x.max(0) as u16;
 
-                if !visible.is_empty() {
-                    renderer.render_line_colored(
-                        x.max(0) as u16,
-                        y as u16,
-                        visible,
-                        cloud.color,
-                    )?;
+                // Пробелы спрайта прозрачны: не затирают звёзды и луну за облаком (issue #60)
+                for (offset, ch) in visible.chars().enumerate() {
+                    if ch == ' ' {
+                        continue;
+                    }
+                    let render_x = start_x + offset as u16;
+                    if render_x >= self.terminal_width {
+                        break;
+                    }
+                    renderer.render_char(render_x, y as u16, ch, cloud.color)?;
                 }
             }
         }
