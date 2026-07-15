@@ -86,6 +86,8 @@ pub struct CatSystem {
     prey_phase: f32,
     // Кадры, пока в небе есть на что смотреть (самолёт/МКС)
     sky_watch_frames: u32,
+    // Светлячок присел на хвост спящего кота (кадров осталось)
+    firefly_rest: u32,
     // Демо-режим: короткие таймеры, частые события
     demo: bool,
     terminal_width: u16,
@@ -107,6 +109,7 @@ impl CatSystem {
             prey_y: 0.0,
             prey_phase: 0.0,
             sky_watch_frames: 0,
+            firefly_rest: 0,
             demo: false,
             terminal_width,
             terminal_height,
@@ -440,6 +443,27 @@ impl CatSystem {
             }
         }
 
+        // Тёплой летней ночью светлячок может присесть на хвост спящего кота
+        if self.state == CatState::Sleep {
+            let warm_night = !ctx.conditions.sun.is_day
+                && ctx
+                    .state
+                    .current_weather
+                    .as_ref()
+                    .map(|w| w.temperature > 15.0)
+                    .unwrap_or(false);
+            if self.firefly_rest > 0 {
+                self.firefly_rest -= 1;
+            } else if warm_night {
+                let chance = if self.demo { 0.02 } else { 0.002 };
+                if rng.random::<f32>() < chance {
+                    self.firefly_rest = 120 + rng.random::<u32>() % 150;
+                }
+            }
+        } else {
+            self.firefly_rest = 0;
+        }
+
         self.x = self
             .x
             .clamp(1.0, self.terminal_width.saturating_sub(9) as f32);
@@ -603,6 +627,28 @@ impl CatSystem {
                         renderer.render_char(bx as u16, by as u16, ch, color)?;
                     }
                 }
+            }
+        }
+
+        // Светлячок мигает на хвосте спящего кота
+        if self.firefly_rest > 0 && (self.frame / 7) % 2 == 0 {
+            let tail_x = if self.facing_right {
+                x
+            } else {
+                x + CAT_WIDTH - 2
+            };
+            let tail_y = cat_y + 1;
+            if tail_x >= 0
+                && tail_x < self.terminal_width as i16
+                && tail_y >= 0
+                && tail_y < self.terminal_height as i16
+            {
+                renderer.render_char(
+                    tail_x as u16,
+                    tail_y as u16,
+                    '*',
+                    Color::Rgb { r: 255, g: 250, b: 130 },
+                )?;
             }
         }
 

@@ -56,6 +56,13 @@ pub struct NightSkySystem {
     sleigh_cooldown: u32,
     yaga: Option<Flyer>,
     yaga_cooldown: u32,
+    // Болид: очень редкая яркая падающая звезда с цветным следом
+    bolide: Option<Meteor>,
+    bolide_cooldown: u32,
+    // Северное сияние: кадры до конца показа и время для волн
+    aurora_frames: u32,
+    aurora_cooldown: u32,
+    aurora_t: f32,
     terminal_width: u16,
     terminal_height: u16,
 }
@@ -75,9 +82,22 @@ impl NightSkySystem {
             sleigh_cooldown: 2_000,
             yaga: None,
             yaga_cooldown: 14_000,
+            bolide: None,
+            bolide_cooldown: 40_000,
+            aurora_frames: 0,
+            aurora_cooldown: 20_000,
+            aurora_t: 0.0,
             terminal_width,
             terminal_height,
         }
+    }
+
+    /// Зимние месяцы - сезон северного сияния
+    fn winter_season(&self) -> bool {
+        if self.demo {
+            return true;
+        }
+        matches!(chrono::Local::now().month(), 12 | 1 | 2)
     }
 
     fn new_year_season(&self) -> bool {
@@ -223,6 +243,8 @@ impl AnimationSystem for NightSkySystem {
             self.ufo_cooldown = 500;
             self.sleigh_cooldown = 150;
             self.yaga_cooldown = 800;
+            self.bolide_cooldown = 1_050;
+            self.aurora_cooldown = 400;
         }
     }
 
@@ -270,6 +292,53 @@ impl AnimationSystem for NightSkySystem {
                     90 + rng.random::<u32>() % 120
                 } else {
                     900 + rng.random::<u32>() % 1800
+                };
+            }
+        }
+
+        // Болид: очень редкий, крупный и цветной
+        if let Some(bolide) = self.bolide.as_mut() {
+            bolide.x += bolide.dx;
+            bolide.y += bolide.dy;
+            bolide.life = bolide.life.saturating_sub(1);
+            let dead = bolide.life == 0 || bolide.y > ctx.horizon_y as f32 - 5.0;
+            if dead {
+                self.bolide = None;
+            }
+        } else if night && sky_visible {
+            self.bolide_cooldown = self.bolide_cooldown.saturating_sub(1);
+            if self.bolide_cooldown == 0 {
+                let x = 10.0 + rng.random::<f32>() * (self.terminal_width as f32 - 20.0);
+                // Летит от края к центру: весь росчерк остаётся на экране
+                let leftward = x > self.terminal_width as f32 / 2.0;
+                self.bolide = Some(Meteor {
+                    x,
+                    y: 1.0,
+                    dx: if leftward { -1.7 } else { 1.7 },
+                    dy: 0.55,
+                    life: 44,
+                });
+                // Раз в 2-4 часа: настоящая редкость
+                self.bolide_cooldown = if self.demo {
+                    1_300
+                } else {
+                    108_000 + rng.random::<u32>() % 108_000
+                };
+            }
+        }
+
+        // Северное сияние: зимними ясными ночами, идёт несколько минут
+        if self.aurora_frames > 0 {
+            self.aurora_frames -= 1;
+            self.aurora_t += 0.02;
+        } else if night && sky_visible && self.winter_season() {
+            self.aurora_cooldown = self.aurora_cooldown.saturating_sub(1);
+            if self.aurora_cooldown == 0 {
+                self.aurora_frames = 1_800 + rng.random::<u32>() % 1_800;
+                self.aurora_cooldown = if self.demo {
+                    1_200
+                } else {
+                    54_000 + rng.random::<u32>() % 54_000
                 };
             }
         }
@@ -368,6 +437,56 @@ impl AnimationSystem for NightSkySystem {
         renderer: &mut TerminalRenderer,
         _ctx: &FrameContext<'_>,
     ) -> io::Result<()> {
+        // Северное сияние: колышущиеся занавеси, фиолетовый градиент сверху
+        // к зелёному снизу (труколор с деградацией до White на бедных терминалах)
+        if self.aurora_frames > 0 {
+            let t = self.aurora_t;
+            for x in 0..self.terminal_width as i16 {
+                let fx = x as f32;
+                let wave = (fx * 0.13 + t * 1.7).sin() + (fx * 0.07 - t).sin();
+                let height = (2.5 + wave * 1.6).max(1.0) as i16;
+                for y in 1..=height {
+                    // Мерцающие прорехи в занавеси
+                    if (x + y * 3 + (t * 9.0) as i16) % 4 == 0 {
+                        continue;
+                    }
+                    if y >= self.terminal_height as i16 {
+                        break;
+                    }
+                    let (ch, color) = match y {
+                        1 => ('.', Color::Rgb { r: 205, g: 120, b: 255 }),
+                        2 => (':', Color::Rgb { r: 150, g: 140, b: 255 }),
+                        3 => (':', Color::Rgb { r: 95, g: 215, b: 205 }),
+                        _ => ('|', Color::Rgb { r: 110, g: 240, b: 145 }),
+                    };
+                    renderer.render_char(x as u16, y as u16, ch, color)?;
+                }
+            }
+        }
+
+        // Болид: крупная голова и сиренево-розовый след
+        if let Some(bolide) = &self.bolide {
+            let trail: [(char, Color, f32); 6] = [
+                ('@', Color::Rgb { r: 255, g: 245, b: 190 }, 0.0),
+                ('O', Color::Rgb { r: 215, g: 150, b: 255 }, 1.0),
+                ('o', Color::Rgb { r: 190, g: 120, b: 255 }, 2.0),
+                ('*', Color::Rgb { r: 255, g: 140, b: 225 }, 3.0),
+                ('+', Color::Rgb { r: 225, g: 120, b: 200 }, 4.5),
+                ('.', Color::DarkGrey, 6.0),
+            ];
+            for (ch, color, back) in trail {
+                let x = (bolide.x - bolide.dx * back).floor() as i16;
+                let y = (bolide.y - bolide.dy * back).floor() as i16;
+                if x >= 0
+                    && x < self.terminal_width as i16
+                    && y >= 0
+                    && y < self.terminal_height as i16
+                {
+                    renderer.render_char(x as u16, y as u16, ch, color)?;
+                }
+            }
+        }
+
         // Метеоры со следом
         for meteor in &self.meteors {
             let trail = [

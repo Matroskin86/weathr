@@ -3,9 +3,9 @@ use crate::animation::{
     airplanes::AirplaneSystem, birds::BirdSystem, cat::CatSystem, chimney::ChimneySmoke,
     clouds::CloudSystem,
     fireflies::FireflySystem, fog::FogSystem, holidays::HolidaySystem, iss::IssSystem,
-    leaves::FallingLeaves, moon::MoonSystem, night_sky::NightSkySystem,
-    raindrops::RaindropSystem, snow::SnowSystem, stars::StarSystem, sunny::SunSystem,
-    thunderstorm::ThunderstormSystem,
+    leaves::FallingLeaves, moon::MoonSystem, night_sky::NightSkySystem, rainbow::RainbowSystem,
+    raindrops::RaindropSystem, snow::SnowSystem, snowman::SnowmanSystem, stars::StarSystem,
+    sunny::SunSystem, thunderstorm::ThunderstormSystem,
 };
 use crate::app_state::AppState;
 use crate::render::TerminalRenderer;
@@ -29,13 +29,16 @@ impl AnimationManager {
             // Солнце раньше птиц: птицы рисуются поверх и летят перед солнцем (issue #60)
             Box::new(SunSystem::new()),
             Box::new(BirdSystem::new(term_width, term_height)),
+            // Радуга за облаками
+            Box::new(RainbowSystem::new(term_width, term_height)),
             Box::new(CloudSystem::new(term_width, term_height)),
             Box::new(AirplaneSystem::new(term_width, term_height)),
             Box::new(IssSystem::new(term_width, term_height)),
             Box::new(NightSkySystem::new(term_width, term_height)),
             // Post-scene
             Box::new(ChimneySmoke::new()),
-            // Праздники до кота: кот проходит ПЕРЕД гирляндой, а не под огоньками
+            // Снеговик и праздники до кота: кот проходит перед ними
+            Box::new(SnowmanSystem::new(term_width, term_height)),
             Box::new(HolidaySystem::new(term_width, term_height)),
             Box::new(CatSystem::new(term_width, term_height)),
             // Foreground
