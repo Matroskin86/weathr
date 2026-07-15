@@ -184,7 +184,7 @@ impl CatSystem {
     }
 
     fn start_mouse_hunt(&mut self, rng: &mut (impl Rng + ?Sized)) {
-        self.prey = Prey::Mouse;
+||        self.prey = Prey::Mouse;
         self.state = CatState::Hunt(HuntPhase::Stalk);
         self.timer = 450;
         // Мышь выскакивает рядом и удирает от кота к ближайшему краю
@@ -200,19 +200,20 @@ impl CatSystem {
 
         // Полнолуние ясной ночью: кот заворожён луной
         let moon_p = if Self::full_moon_night(ctx) {
-            if self.demo { 0.35 } else { 0.15 }
+            if self.demo { 0.2 } else { 0.15 }
         } else {
             0.0
         };
-        // Ночью кот больше спит; мыши активнее в сумерках
+        // Ночью кот больше спит; мыши активнее в сумерках.
+        // Мышь и охота идут в начале очереди: хвост распределения их не съедает
         let (walk_p, sleep_p, hunt_p, mouse_p, dig_p) = if is_day {
-            (0.35, 0.13, 0.20, 0.07, 0.10)
+            (0.33, 0.13, 0.20, 0.10, 0.10)
         } else {
-            (0.20, 0.35, 0.12, 0.12, 0.05)
+            (0.18, 0.30, 0.12, 0.16, 0.05)
         };
-        // В демо охота и мышь заметно чаще
+        // В демо мышь выскакивает почти через раз, охота чаще
         let (hunt_p, mouse_p) = if self.demo {
-            (hunt_p * 2.0, mouse_p * 2.5)
+            (hunt_p * 1.5, 0.4)
         } else {
             (hunt_p, mouse_p)
         };
@@ -223,6 +224,16 @@ impl CatSystem {
             self.timer = (600 + (rng.random::<u32>() % 450)) / self.pace();
             // Луна рисуется в правой четверти неба
             self.facing_right = self.x < self.terminal_width as f32 * 0.75;
+            return;
+        }
+        threshold += mouse_p;
+        if roll < threshold {
+            self.start_mouse_hunt(rng);
+            return;
+        }
+        threshold += hunt_p;
+        if roll < threshold {
+            self.start_hunt(ctx, rng);
             return;
         }
         threshold += walk_p;
@@ -237,16 +248,6 @@ impl CatSystem {
         if roll < threshold {
             self.state = CatState::Sleep;
             self.timer = (450 + (rng.random::<u32>() % 900)) / self.pace();
-            return;
-        }
-        threshold += hunt_p;
-        if roll < threshold {
-            self.start_hunt(ctx, rng);
-            return;
-        }
-        threshold += mouse_p;
-        if roll < threshold {
-            self.start_mouse_hunt(rng);
             return;
         }
         threshold += dig_p;
@@ -565,9 +566,11 @@ impl CatSystem {
                     continue;
                 }
                 let color = match *ch {
-                    // Глаза: днём зелёные, в темноте светятся жёлтым
+                    // Глаза: на охоте горят красным, днём зелёные, в темноте жёлтые
                     'o' | '^' | '*' | '>' | '<' => {
-                        if is_day {
+                        if matches!(self.state, CatState::Hunt(_)) {
+                            Color::Rgb { r: 255, g: 70, b: 70 }
+                        } else if is_day {
                             Color::Green
                         } else {
                             Color::Yellow

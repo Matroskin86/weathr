@@ -33,8 +33,9 @@ impl AnimationManager {
             Box::new(RainbowSystem::new(term_width, term_height)),
             Box::new(CloudSystem::new(term_width, term_height)),
             Box::new(AirplaneSystem::new(term_width, term_height)),
-            Box::new(IssSystem::new(term_width, term_height)),
+            // МКС после ночного неба: станция рисуется поверх сияния, иначе тонет в нём
             Box::new(NightSkySystem::new(term_width, term_height)),
+            Box::new(IssSystem::new(term_width, term_height)),
             // Post-scene
             Box::new(ChimneySmoke::new()),
             // Снеговик и праздники до кота: кот проходит перед ними

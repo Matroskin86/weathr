@@ -14,7 +14,10 @@ fn iss_art() -> &'static Vec<String> {
 }
 
 /// МКС: пролетает по верху экрана быстрее самолётов, всегда на восток
-/// (наклонение орбиты 51.6°, над средними широтами движется с запада)
+/// (наклонение орбиты 51.6°, над средними широтами движется с запада).
+/// Летит ниже HUD-строк и рисуется поверх сияния, чтобы читалась целиком.
+const ISS_ALTITUDE_ROW: i16 = 4;
+
 pub struct IssSystem {
     // x позиции станции; None = станции на экране нет
     x: Option<f32>,
@@ -96,7 +99,7 @@ impl AnimationSystem for IssSystem {
         let art = iss_art();
 
         for (line_offset, line) in art.iter().enumerate() {
-            let render_y = line_offset as i16;
+            let render_y = ISS_ALTITUDE_ROW + line_offset as i16;
             if render_y >= self.terminal_height as i16 {
                 break;
             }
@@ -106,8 +109,10 @@ impl AnimationSystem for IssSystem {
                     continue;
                 }
                 if ch != ' ' {
+                    // Панели и ферма золотые, корпус модуля белый, иллюминаторы голубые
                     let color = match ch {
-                        '=' | '|' => Color::DarkYellow,
+                        '=' => Color::DarkYellow,
+                        '|' => Color::Grey,
                         'o' => Color::Cyan,
                         _ => Color::White,
                     };
@@ -117,7 +122,7 @@ impl AnimationSystem for IssSystem {
         }
 
         // Подпись под станцией
-        let label_y = art.len() as i16;
+        let label_y = ISS_ALTITUDE_ROW + art.len() as i16;
         if label_y < self.terminal_height as i16 {
             for (char_offset, ch) in self.label.chars().enumerate() {
                 let render_x = x + char_offset as i16;
