@@ -511,10 +511,16 @@ impl CatSystem {
             if render_y < 0 || render_y >= self.terminal_height as i16 {
                 continue;
             }
+            // Строки позы разной длины: перед зеркалированием выравниваем
+            // до общей ширины, иначе уши съезжают на символ (баг с хвостом вправо)
+            let pose_width = pose.iter().map(|l| l.chars().count()).max().unwrap_or(0);
             let chars: Vec<char> = if self.facing_right {
                 line.chars().collect()
             } else {
-                line.chars()
+                let mut padded: Vec<char> = line.chars().collect();
+                padded.resize(pose_width, ' ');
+                padded
+                    .iter()
                     .rev()
                     .map(|ch| match ch {
                         '(' => ')',
@@ -522,7 +528,7 @@ impl CatSystem {
                         '/' => '\\',
                         '\\' => '/',
                         'c' => 'ɔ',
-                        c => c,
+                        c => *c,
                     })
                     .collect()
             };

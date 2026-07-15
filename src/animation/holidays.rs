@@ -150,8 +150,14 @@ impl AnimationSystem for HolidaySystem {
                 None => {
                     self.rocket_cooldown = self.rocket_cooldown.saturating_sub(1);
                     if self.rocket_cooldown == 0 {
-                        self.rocket_x =
-                            (self.terminal_width as i16 / 3).max(2);
+                        // Стартовая площадка справа за домом, не из крыши
+                        let house_x = (self.terminal_width / 2).saturating_sub(House::WIDTH / 2);
+                        let house_right = house_x + House::WIDTH;
+                        self.rocket_x = if house_right + 10 < self.terminal_width {
+                            (house_right + 8) as i16
+                        } else {
+                            self.terminal_width.saturating_sub(6) as i16
+                        };
                         self.rocket_y = Some(ctx.horizon_y as f32 - 1.0);
                     }
                 }
@@ -255,11 +261,13 @@ impl AnimationSystem for HolidaySystem {
                     }
                 }
             }
-            // Подпись справа от ракеты
+            // Подпись слева от ракеты (справа может не хватить экрана)
+            let label = "Поехали!";
             let label_y = base_y + 1;
+            let label_x = self.rocket_x - label.chars().count() as i16 - 2;
             if label_y >= 0 && label_y < self.terminal_height as i16 {
-                for (i, ch) in "Поехали!".chars().enumerate() {
-                    let x = self.rocket_x + 6 + i as i16;
+                for (i, ch) in label.chars().enumerate() {
+                    let x = label_x + i as i16;
                     if x >= 0 && x < self.terminal_width as i16 {
                         renderer.render_char(x as u16, label_y as u16, ch, Color::DarkGrey)?;
                     }

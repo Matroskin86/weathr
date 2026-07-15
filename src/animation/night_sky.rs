@@ -232,6 +232,19 @@ impl AnimationSystem for NightSkySystem {
         self.frame = self.frame.wrapping_add(1);
 
         let night = !ctx.conditions.sun.is_day;
+        // Сквозь плотные тучи звездопад и комету не видно (переменная облачность не мешает)
+        let sky_visible = !ctx
+            .state
+            .current_weather
+            .as_ref()
+            .map(|w| {
+                matches!(
+                    w.condition,
+                    crate::weather::WeatherCondition::Cloudy
+                        | crate::weather::WeatherCondition::Overcast
+                )
+            })
+            .unwrap_or(false);
 
         // Метеоры: частые ночные росчерки
         for meteor in &mut self.meteors {
@@ -242,7 +255,7 @@ impl AnimationSystem for NightSkySystem {
         let height_limit = ctx.horizon_y as f32 - 4.0;
         self.meteors
             .retain(|m| m.life > 0 && m.y < height_limit && m.x > -4.0);
-        if night {
+        if night && sky_visible {
             self.meteor_cooldown = self.meteor_cooldown.saturating_sub(1);
             if self.meteor_cooldown == 0 {
                 let leftward = rng.random::<bool>();
@@ -261,16 +274,22 @@ impl AnimationSystem for NightSkySystem {
             }
         }
 
-        // Комета: редкая, медленная, с длинным хвостом
+        // Комета: редкая, падает по пологой косой к горизонту
         if let Some(comet) = self.comet.as_mut() {
-            Self::update_flyer(comet, 0.0);
-            if self.flyer_gone(self.comet.as_ref().unwrap(), 10.0) {
+            comet.x += comet.speed;
+            // Снижение: phase хранит вертикальную скорость
+            comet.y += comet.phase;
+            let too_low = comet.y > ctx.horizon_y as f32 * 0.55;
+            if too_low || self.flyer_gone(self.comet.as_ref().unwrap(), 10.0) {
                 self.comet = None;
             }
-        } else if night {
+        } else if night && sky_visible {
             self.comet_cooldown = self.comet_cooldown.saturating_sub(1);
             if self.comet_cooldown == 0 {
-                self.comet = Some(self.spawn_flyer(rng, 0.28, 10.0));
+                let mut comet = self.spawn_flyer(rng, 0.34, 10.0);
+                comet.y = 1.0 + rng.random::<f32>() * 2.0;
+                comet.phase = 0.09;
+                self.comet = Some(comet);
                 self.comet_cooldown = if self.demo {
                     600
                 } else {
@@ -370,27 +389,30 @@ impl AnimationSystem for NightSkySystem {
             }
         }
 
-        // Комета: яркая голова и хвост против хода
+        // Комета: яркая голова, хвост тянется по диагонали вверх-назад
         if let Some(comet) = &self.comet {
             let dir = comet.speed.signum();
             let head_x = comet.x.floor() as i16;
             let head_y = comet.y.floor() as i16;
             let tail = ['o', '*', '*', '+', '+', '.', '.', '.'];
-            if head_y >= 0 && head_y < self.terminal_height as i16 {
-                if head_x >= 0 && head_x < self.terminal_width as i16 {
-                    renderer.render_char(head_x as u16, head_y as u16, 'O', Color::Cyan)?;
-                }
-                for (i, ch) in tail.iter().enumerate() {
-                    let x = head_x - (dir * (i as f32 + 1.0)) as i16;
-                    let y = head_y - ((i as f32) * 0.25) as i16;
-                    if x >= 0
-                        && x < self.terminal_width as i16
-                        && y >= 0
-                        && y < self.terminal_height as i16
-                    {
-                        let color = if i < 3 { Color::Cyan } else { Color::DarkGrey };
-                        renderer.render_char(x as u16, y as u16, *ch, color)?;
-                    }
+            if head_x >= 0
+                && head_x < self.terminal_width as i16
+                && head_y >= 0
+                && head_y < self.terminal_height as i16
+            {
+                renderer.render_char(head_x as u16, head_y as u16, 'O', Color::Cyan)?;
+            }
+            for (i, ch) in tail.iter().enumerate() {
+                // Хвост строго против вектора движения: назад по x и вверх по y
+                let x = head_x - (dir * (i as f32 + 1.0)) as i16;
+                let y = head_y - ((i as f32 + 1.0) * 0.3).round() as i16;
+                if x >= 0
+                    && x < self.terminal_width as i16
+                    && y >= 0
+                    && y < self.terminal_height as i16
+                {
+                    let color = if i < 3 { Color::Cyan } else { Color::DarkGrey };
+                    renderer.render_char(x as u16, y as u16, *ch, color)?;
                 }
             }
         }

@@ -35,8 +35,9 @@ impl AnimationManager {
             Box::new(NightSkySystem::new(term_width, term_height)),
             // Post-scene
             Box::new(ChimneySmoke::new()),
-            Box::new(CatSystem::new(term_width, term_height)),
+            // Праздники до кота: кот проходит ПЕРЕД гирляндой, а не под огоньками
             Box::new(HolidaySystem::new(term_width, term_height)),
+            Box::new(CatSystem::new(term_width, term_height)),
             // Foreground
             Box::new(RaindropSystem::new(
                 term_width,
