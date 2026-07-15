@@ -96,6 +96,20 @@ pub fn temperature_color(celsius: f64) -> Color {
 /// Цветной кусок строки HUD-блока
 pub type HudSpan = (String, Color);
 
+/// Короткий русский день недели
+pub fn weekday_ru() -> &'static str {
+    use chrono::Datelike;
+    match chrono::Local::now().weekday() {
+        chrono::Weekday::Mon => "пн",
+        chrono::Weekday::Tue => "вт",
+        chrono::Weekday::Wed => "ср",
+        chrono::Weekday::Thu => "чт",
+        chrono::Weekday::Fri => "пт",
+        chrono::Weekday::Sat => "сб",
+        chrono::Weekday::Sun => "вс",
+    }
+}
+
 /// Русские названия погоды для HUD (локальный патч скринсейвера)
 pub fn condition_name_ru(condition: WeatherCondition) -> &'static str {
     match condition {
@@ -190,12 +204,31 @@ impl AppState {
         }
     }
 
-    /// Раз в минуту помечает HUD на перерисовку, чтобы часы не отставали
+    /// Раз в минуту помечает HUD на перерисовку, чтобы часы не отставали,
+    /// и пересчитывает день/ночь по локальному времени против восхода/заката:
+    /// сцена переключается в момент заката, не дожидаясь обновления API
     pub fn tick_clock(&mut self) {
         use chrono::Timelike;
         let minute = chrono::Local::now().minute();
         if minute != self.last_clock_minute {
             self.last_clock_minute = minute;
+            self.weather_info_needs_update = true;
+            self.refresh_day_night();
+        }
+    }
+
+    fn refresh_day_night(&mut self) {
+        let Some(weather) = self.current_weather.as_mut() else {
+            return;
+        };
+        let (Some(rise), Some(set)) = (weather.sun.rise, weather.sun.set) else {
+            return;
+        };
+        let now = chrono::Local::now().time();
+        let is_day = now >= rise && now < set;
+        if weather.sun.is_day != is_day {
+            weather.sun.is_day = is_day;
+            self.weather_conditions.sun.is_day = is_day;
             self.weather_info_needs_update = true;
         }
     }
@@ -214,6 +247,9 @@ impl AppState {
         self.offline_data_cached_at = None;
         self.last_success_at = Some(unix_now());
         self.weather_info_needs_update = true;
+        // API-поле is_day квантовано 15-минутками и отстаёт у заката -
+        // сразу поправляем по локальному времени против восхода/заката
+        self.refresh_day_night();
     }
 
     /// Оффлайн с сохранёнными данными: показываем их возраст в HUD
@@ -291,8 +327,11 @@ impl AppState {
             let (precip, precip_unit) =
                 format_precipitation(weather.precipitation, self.units.precipitation);
 
-            // Строка 1: время · место · условие с глифом
-            let mut line = vec![(clock.clone(), Color::Cyan)];
+            // Строка 1: время, день недели · место · условие с глифом
+            let mut line = vec![
+                (clock.clone(), Color::Cyan),
+                (format!(" {}", weekday_ru()), dim),
+            ];
             if !location_str.is_empty() {
                 line.push(sep.clone());
                 line.push((location_str.clone(), Color::White));

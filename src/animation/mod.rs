@@ -52,6 +52,10 @@ impl AnimationController {
         self.current_frame
     }
 
+    pub fn current_frame(&self) -> usize {
+        self.current_frame
+    }
+
     pub fn render_frame<A: Animation>(
         &self,
         renderer: &mut TerminalRenderer,

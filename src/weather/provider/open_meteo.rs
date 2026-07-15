@@ -177,6 +177,15 @@ impl WeatherProvider for OpenMeteoProvider {
         let mut sun = CelestialEvents::only_day(data.current.is_day);
         sun.rise = sun_rise;
         sun.set = sun_set;
+        // Дуге солнца нужны границы и зенит: рассвет/закат и середина дня
+        sun.begin_twilight = sun_rise;
+        sun.end_twilight = sun_set;
+        if let (Some(rise), Some(set)) = (sun_rise, sun_set) {
+            let day_secs = (set - rise).num_seconds().max(0);
+            sun.upper_transit = rise.overflowing_add_signed(
+                chrono::Duration::seconds(day_secs / 2),
+            ).0.into();
+        }
 
         // Точки прогноза +3/+6/+12 часов из почасовых рядов (индекс 0 = текущий час)
         let forecast = data

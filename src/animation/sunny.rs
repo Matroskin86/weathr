@@ -164,12 +164,60 @@ impl AnimationSystem for SunSystem {
 
         let default_y = if ctx.size.height > 20 { 3 } else { 2 };
         let y_offset = Self::resolved_sun_y(ctx, default_y);
-        self.controller
-            .render_frame(renderer, &self.animation, y_offset)
+
+        // Прогресс дня: 0 на рассвете, 1 на закате - двигает солнце с
+        // востока (слева) на запад (справа) и красит его у горизонта
+        let progress = Self::day_progress(ctx);
+        let frame = self.animation.get_frame(self.controller.current_frame());
+        let art_width = frame.iter().map(|l| l.chars().count()).max().unwrap_or(0) as f32;
+        let x0 = match progress {
+            Some(p) => {
+                let span = (ctx.size.width as f32 - art_width - 8.0).max(0.0);
+                (4.0 + span * p as f32) as i16
+            }
+            // Без данных о солнце - по центру, как раньше
+            None => ((ctx.size.width as f32 - art_width) / 2.0).max(0.0) as i16,
+        };
+        // У горизонта солнце закатно-оранжевое
+        let color = match progress {
+            Some(p) if !(0.10..=0.90).contains(&p) => Color::Rgb { r: 255, g: 120, b: 60 },
+            Some(p) if !(0.18..=0.82).contains(&p) => Color::Rgb { r: 255, g: 175, b: 70 },
+            _ => Color::Yellow,
+        };
+
+        for (row, line) in frame.iter().enumerate() {
+            let y = y_offset as i16 + row as i16;
+            if y < 0 || y >= ctx.size.height as i16 {
+                continue;
+            }
+            for (col, ch) in line.chars().enumerate() {
+                if ch == ' ' {
+                    continue;
+                }
+                let x = x0 + col as i16;
+                if x >= 0 && x < ctx.size.width as i16 {
+                    renderer.render_char(x as u16, y as u16, ch, color)?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
 impl SunSystem {
+    /// Прогресс светового дня: 0.0 на рассвете, 1.0 на закате
+    fn day_progress(ctx: &FrameContext<'_>) -> Option<f64> {
+        let sun = ctx.state.current_weather.as_ref()?.sun;
+        let (rise, set) = (sun.rise?, sun.set?);
+        let now = chrono::Local::now().time();
+        let total = (set - rise).num_seconds();
+        if total <= 0 {
+            return None;
+        }
+        let elapsed = (now - rise).num_seconds();
+        Some((elapsed as f64 / total as f64).clamp(0.0, 1.0))
+    }
+
     fn parse_weather_time(timestamp: &str) -> Option<NaiveTime> {
         if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
             return Some(dt.time());
