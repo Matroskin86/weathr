@@ -6,6 +6,7 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod flights;
+pub mod starlink;
 pub mod geolocation;
 pub mod render;
 pub mod scene;

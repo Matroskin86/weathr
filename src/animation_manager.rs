@@ -2,9 +2,10 @@ use crate::animation::{
     AnimationSystem, ChimneyPosition, FrameCommands, FrameContext, RenderLayer, TerminalSize, Wind,
     airplanes::AirplaneSystem, birds::BirdSystem, cat::CatSystem, chimney::ChimneySmoke,
     clouds::CloudSystem,
-    fireflies::FireflySystem, fog::FogSystem, holidays::HolidaySystem, iss::IssSystem,
-    leaves::FallingLeaves, moon::MoonSystem, night_sky::NightSkySystem, rainbow::RainbowSystem,
-    raindrops::RaindropSystem, snow::SnowSystem, snowman::SnowmanSystem, stars::StarSystem,
+    fireflies::FireflySystem, fog::FogSystem, holidays::HolidaySystem,
+    house_life::HouseLifeSystem, iss::IssSystem, leaves::FallingLeaves, moon::MoonSystem,
+    night_sky::NightSkySystem, rainbow::RainbowSystem, raindrops::RaindropSystem,
+    snow::SnowSystem, snow_cover::SnowCoverSystem, snowman::SnowmanSystem, stars::StarSystem,
     sunny::SunSystem, thunderstorm::ThunderstormSystem,
 };
 use crate::app_state::AppState;
@@ -17,6 +18,9 @@ use std::io;
 pub struct AnimationManager {
     systems: Vec<Box<dyn AnimationSystem>>,
     show_leaves: bool,
+    // Вспышка молнии: выставляется в кадре N, видна системам в кадре N+1
+    storm_flash_pending: bool,
+    storm_flash_last_frame: bool,
 }
 
 impl AnimationManager {
@@ -36,9 +40,11 @@ impl AnimationManager {
             // МКС после ночного неба: станция рисуется поверх сияния, иначе тонет в нём
             Box::new(NightSkySystem::new(term_width, term_height)),
             Box::new(IssSystem::new(term_width, term_height)),
-            // Post-scene
+            // Post-scene: свет окон и снег на доме - сразу поверх сцены,
+            // затем снеговик и праздники, кот ходит перед всеми
+            Box::new(HouseLifeSystem::new(term_width, term_height)),
+            Box::new(SnowCoverSystem::new(term_width, term_height)),
             Box::new(ChimneySmoke::new()),
-            // Снеговик и праздники до кота: кот проходит перед ними
             Box::new(SnowmanSystem::new(term_width, term_height)),
             Box::new(HolidaySystem::new(term_width, term_height)),
             Box::new(CatSystem::new(term_width, term_height)),
@@ -69,6 +75,8 @@ impl AnimationManager {
         Self {
             systems,
             show_leaves,
+            storm_flash_pending: false,
+            storm_flash_last_frame: false,
         }
     }
 
@@ -131,6 +139,12 @@ impl AnimationManager {
         }
     }
 
+    pub fn spawn_starlink_train(&mut self, count: usize) {
+        for system in &mut self.systems {
+            system.on_starlink_train(count);
+        }
+    }
+
     pub fn set_flights_mode(&mut self, real_only: bool) {
         for system in &mut self.systems {
             system.on_flights_mode(real_only);
@@ -157,6 +171,7 @@ impl AnimationManager {
             state,
             show_leaves: self.show_leaves,
             chimney,
+            storm_flash: self.storm_flash_last_frame,
         }
     }
 
@@ -186,6 +201,8 @@ impl AnimationManager {
 
         if commands.flash_screen {
             renderer.flash_screen()?;
+            // Кот и прочие увидят вспышку в контексте следующего кадра
+            self.storm_flash_pending = true;
         }
 
         Ok(())
@@ -199,6 +216,9 @@ impl AnimationManager {
         layout: &SceneLayout,
         rng: &mut impl Rng,
     ) -> io::Result<()> {
+        // Начало кадра: вспышка прошлого кадра становится видимой контексту
+        self.storm_flash_last_frame = self.storm_flash_pending;
+        self.storm_flash_pending = false;
         let ctx = self.make_context(conditions, state, layout);
         self.render_layer(renderer, RenderLayer::Background, &ctx, rng)
     }

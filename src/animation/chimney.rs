@@ -123,7 +123,17 @@ impl AnimationSystem for ChimneySmoke {
     }
 
     fn is_active(&self, ctx: &FrameContext<'_>) -> bool {
-        !ctx.conditions.is_raining && !ctx.conditions.is_thunderstorm && ctx.chimney.is_some()
+        // Печь топится только в прохладу: в тёплую погоду дыма нет
+        let cold_enough = ctx
+            .state
+            .current_weather
+            .as_ref()
+            .map(|w| w.temperature < 12.0)
+            .unwrap_or(true);
+        cold_enough
+            && !ctx.conditions.is_raining
+            && !ctx.conditions.is_thunderstorm
+            && ctx.chimney.is_some()
     }
 
     fn on_resize(&mut self, _size: TerminalSize) {}

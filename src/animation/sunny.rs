@@ -287,6 +287,7 @@ mod tests {
             state: &state,
             show_leaves: false,
             chimney: None,
+            storm_flash: false,
         };
 
         let y = SunSystem::resolved_sun_y(&ctx, 3);
@@ -339,6 +340,7 @@ mod tests {
             state: &state,
             show_leaves: false,
             chimney: None,
+            storm_flash: false,
         };
 
         let y = SunSystem::resolved_sun_y(&ctx, 4);

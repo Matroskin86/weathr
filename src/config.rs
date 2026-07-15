@@ -48,6 +48,31 @@ pub struct Config {
     /// Пролёты МКС над локацией (open-notify)
     #[serde(default)]
     pub iss: IssConfig,
+    /// Поезда Starlink над локацией (TLE Celestrak + SGP4 локально)
+    #[serde(default)]
+    pub starlink: StarlinkConfig,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct StarlinkConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Период пересчёта позиций созвездия в секундах
+    #[serde(default = "default_starlink_poll_secs")]
+    pub poll_secs: u64,
+}
+
+fn default_starlink_poll_secs() -> u64 {
+    600
+}
+
+impl Default for StarlinkConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            poll_secs: default_starlink_poll_secs(),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -445,6 +470,7 @@ longitude = 0.0
             fps: 30,
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
+            starlink: StarlinkConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -473,6 +499,7 @@ longitude = 0.0
             fps: 30,
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
+            starlink: StarlinkConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -501,6 +528,7 @@ longitude = 0.0
             fps: 30,
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
+            starlink: StarlinkConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -529,6 +557,7 @@ longitude = 0.0
             fps: 30,
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
+            starlink: StarlinkConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -557,6 +586,7 @@ longitude = 0.0
             fps: 30,
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
+            starlink: StarlinkConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),

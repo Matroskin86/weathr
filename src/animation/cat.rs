@@ -90,6 +90,11 @@ pub struct CatSystem {
     firefly_rest: u32,
     // В демо первая мышь показывается гарантированно (один раз)
     demo_mouse_done: bool,
+    // Кот вздрагивает от вспышки молнии (кадров осталось)
+    startled: u32,
+    // Мышиная норка у забора: выглядывание и пауза между
+    hole_peek: u32,
+    hole_cooldown: u32,
     // Демо-режим: короткие таймеры, частые события
     demo: bool,
     terminal_width: u16,
@@ -113,6 +118,9 @@ impl CatSystem {
             sky_watch_frames: 0,
             firefly_rest: 0,
             demo_mouse_done: false,
+            startled: 0,
+            hole_peek: 0,
+            hole_cooldown: 900,
             demo: false,
             terminal_width,
             terminal_height,
@@ -122,6 +130,11 @@ impl CatSystem {
     /// Земля кота: ноги на одной линии с основанием дома
     fn ground_row(&self, horizon_y: u16) -> i16 {
         horizon_y as i16 - CAT_HEIGHT
+    }
+
+    /// Норка мыши в конце забора
+    fn hole_x(&self) -> f32 {
+        self.terminal_width as f32 * 0.88
     }
 
     /// Точка у стены дома, где кот прячется от непогоды (под скатом крыши)
@@ -284,6 +297,33 @@ impl CatSystem {
 
         let bad = Self::bad_weather(ctx);
         let shelter_x = self.shelter_x(ctx.chimney.map(|c| c.x));
+
+        // Гром: кот вздрагивает от вспышки молнии
+        self.startled = self.startled.saturating_sub(1);
+        if ctx.storm_flash {
+            self.startled = 10;
+        }
+
+        // Мышиная норка у забора: мышь выглядывает, когда кот далеко
+        let hole_x = self.hole_x();
+        if self.hole_peek > 0 {
+            self.hole_peek -= 1;
+        } else {
+            self.hole_cooldown = self.hole_cooldown.saturating_sub(1);
+            let cat_far = (self.x - hole_x).abs() > 15.0;
+            if self.hole_cooldown == 0 && cat_far && !bad {
+                self.hole_peek = 40 + rng.random::<u32>() % 50;
+                self.hole_cooldown = if self.demo {
+                    300 + rng.random::<u32>() % 300
+                } else {
+                    1_800 + rng.random::<u32>() % 2_700
+                };
+            }
+        }
+        // Кот подошёл - мышь мгновенно прячется
+        if (self.x - hole_x).abs() <= 12.0 {
+            self.hole_peek = 0;
+        }
 
         // Непогода: всё бросаем и бежим под крышу
         if bad {
@@ -488,7 +528,10 @@ impl CatSystem {
     fn current_pose(&self) -> [&'static str; 2] {
         match self.state {
             CatState::Shelter => {
-                if self.frame % 90 < 8 {
+                if self.startled > 0 {
+                    // Вздрогнул от грома
+                    CAT_POUNCE
+                } else if self.frame % 90 < 8 {
                     CAT_SIT_BLINK
                 } else {
                     CAT_SIT
@@ -644,6 +687,38 @@ impl CatSystem {
                         };
                         renderer.render_char(bx as u16, by as u16, ch, color)?;
                     }
+                }
+            }
+        }
+
+        // Испуганный возглас над вздрогнувшим котом
+        if self.startled > 0 {
+            let bang_x = x + 3;
+            let bang_y = cat_y - 1;
+            if bang_x >= 0
+                && bang_x < self.terminal_width as i16
+                && bang_y >= 0
+                && bang_y < self.terminal_height as i16
+            {
+                renderer.render_char(bang_x as u16, bang_y as u16, '!', Color::Yellow)?;
+            }
+        }
+
+        // Норка мыши у забора: дырка всегда, мышь выглядывает когда кот далеко
+        let hole_x = self.hole_x().floor() as i16;
+        let hole_y = ctx.horizon_y as i16 - 1;
+        if hole_x >= 1
+            && hole_x < self.terminal_width as i16
+            && hole_y >= 0
+            && hole_y < self.terminal_height as i16
+        {
+            renderer.render_char(hole_x as u16, hole_y as u16, 'o', Color::DarkGrey)?;
+            if self.hole_peek > 0 {
+                // Высунулась мордочка с усиками
+                let peek_x = hole_x - 1;
+                if peek_x >= 0 {
+                    renderer.render_char(peek_x as u16, hole_y as u16, '<', Color::Grey)?;
+                    renderer.render_char(hole_x as u16, hole_y as u16, ':', Color::Grey)?;
                 }
             }
         }

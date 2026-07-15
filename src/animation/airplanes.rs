@@ -114,10 +114,10 @@ impl AirplaneSystem {
         }
     }
 
-    /// Эшелон самолётов: ниже МКС (строки 3-7 её), чтобы борта не наезжали на станцию
+    /// Эшелон самолётов: ниже МКС (строки 7-11 её), чтобы борта не наезжали на станцию
     fn flight_level(terminal_height: u16, rng: &mut (impl Rng + ?Sized)) -> f32 {
-        let band = (terminal_height / 6).max(2);
-        (9 + (rng.random::<u16>() % band)) as f32
+        let band = (terminal_height / 7).max(2);
+        (12 + (rng.random::<u16>() % band)) as f32
     }
 
     fn spawn_plane(&mut self, rng: &mut (impl Rng + ?Sized)) {
@@ -139,7 +139,7 @@ impl AirplaneSystem {
             return;
         }
 
-        let y = 9.0 + (self.terminal_height / 12) as f32;
+        let y = 12.0 + (self.terminal_height / 14) as f32;
         let art_w = Self::art_width(art_eastbound());
 
         let (x, speed) = if eastbound {

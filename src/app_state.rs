@@ -3,6 +3,7 @@ use crate::weather::{
     WeatherCondition, WeatherConditions, WeatherData, WeatherLocation, WeatherUnits,
     format_precipitation, format_temperature, format_wind_speed,
 };
+use crossterm::style::Color;
 use std::time::Instant;
 
 /// Румб по метеонаправлению ветра (откуда дует), 8 направлений
@@ -19,6 +20,81 @@ pub fn wind_rumb_ru(direction_deg: f64) -> &'static str {
         _ => "СЗ",
     }
 }
+
+/// Стрелка, куда ветер несёт (направление в метео - откуда дует)
+pub fn wind_arrow(direction_deg: f64) -> char {
+    let to = (direction_deg + 180.0).rem_euclid(360.0);
+    ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][((to + 22.5) / 45.0) as usize % 8]
+}
+
+/// Узкий глиф погодного условия (только одноклеточные символы)
+pub fn condition_glyph(condition: WeatherCondition, is_day: bool) -> char {
+    match condition {
+        WeatherCondition::Clear => {
+            if is_day {
+                '☀'
+            } else {
+                '☾'
+            }
+        }
+        WeatherCondition::PartlyCloudy | WeatherCondition::Cloudy | WeatherCondition::Overcast => {
+            '☁'
+        }
+        WeatherCondition::Fog => '≡',
+        WeatherCondition::Drizzle
+        | WeatherCondition::Rain
+        | WeatherCondition::RainShowers
+        | WeatherCondition::FreezingRain => '☂',
+        WeatherCondition::Snow | WeatherCondition::SnowGrains | WeatherCondition::SnowShowers => {
+            '❄'
+        }
+        WeatherCondition::Thunderstorm | WeatherCondition::ThunderstormHail => 'ϟ',
+    }
+}
+
+/// Цвет условия для HUD
+pub fn condition_color(condition: WeatherCondition, is_day: bool) -> Color {
+    use crossterm::style::Color as C;
+    match condition {
+        WeatherCondition::Clear => {
+            if is_day {
+                C::Yellow
+            } else {
+                C::Rgb { r: 200, g: 205, b: 235 }
+            }
+        }
+        WeatherCondition::PartlyCloudy => C::Grey,
+        WeatherCondition::Cloudy | WeatherCondition::Overcast => C::DarkGrey,
+        WeatherCondition::Fog => C::Grey,
+        WeatherCondition::Drizzle
+        | WeatherCondition::Rain
+        | WeatherCondition::RainShowers
+        | WeatherCondition::FreezingRain => C::Rgb { r: 110, g: 175, b: 255 },
+        WeatherCondition::Snow | WeatherCondition::SnowGrains | WeatherCondition::SnowShowers => {
+            C::White
+        }
+        WeatherCondition::Thunderstorm | WeatherCondition::ThunderstormHail => C::Magenta,
+    }
+}
+
+/// Цвет температуры: от ледяного синего к жаркому оранжевому
+pub fn temperature_color(celsius: f64) -> Color {
+    use crossterm::style::Color as C;
+    if celsius < 0.0 {
+        C::Rgb { r: 150, g: 190, b: 255 }
+    } else if celsius < 10.0 {
+        C::Cyan
+    } else if celsius < 18.0 {
+        C::Rgb { r: 130, g: 220, b: 160 }
+    } else if celsius < 25.0 {
+        C::Rgb { r: 255, g: 205, b: 95 }
+    } else {
+        C::Rgb { r: 255, g: 140, b: 80 }
+    }
+}
+
+/// Цветной кусок строки HUD-блока
+pub type HudSpan = (String, Color);
 
 /// Русские названия погоды для HUD (локальный патч скринсейвера)
 pub fn condition_name_ru(condition: WeatherCondition) -> &'static str {
@@ -47,6 +123,8 @@ pub struct AppState {
     pub loading_state: LoadingState,
     pub cached_weather_info: String,
     pub cached_forecast_info: String,
+    /// HUD-блок: строки из цветных кусков, рисуется в рамке
+    pub hud_block: Vec<Vec<HudSpan>>,
     pub weather_info_needs_update: bool,
     pub location: WeatherLocation,
     pub city_name: Option<String>,
@@ -97,6 +175,7 @@ impl AppState {
             loading_state: LoadingState::new(),
             cached_weather_info: String::new(),
             cached_forecast_info: String::new(),
+            hud_block: Vec::new(),
             weather_info_needs_update: true,
             location,
             city_name,
@@ -193,119 +272,161 @@ impl AppState {
                     None => coords,
                 },
             };
-            format!(" | Место: {}", label)
+            label
         };
 
-        // "Ощущается как": добавка к температуре, если включено в конфиге
-        let apparent_temp_str = if let Some(ref weather) = self.current_weather {
-            if self.use_feels_like_temperature {
-                let (apparent_temp, apparent_temp_unit) =
-                    format_temperature(weather.feels_like_temperature, self.units.temperature);
-                format!(" (ощущается {:.1}{})", apparent_temp, apparent_temp_unit)
-            } else {
-                String::new()
-            }
-        } else {
-            String::new()
-        };
+        let clock = chrono::Local::now().format("%H:%M").to_string();
 
-        let clock = chrono::Local::now().format("%H:%M");
-        let quit_hint = if self.hide_quit_hint {
-            ""
-        } else {
-            " | Выход: 'q'"
-        };
+        // HUD-блок: аккуратная сводка цветными кусками, рисуется в рамке.
+        // Дизайн: время и место, температура цветом по шкале, ветер со
+        // стрелкой, прогноз погодными глифами, закат/восход со своим знаком
+        let dim = Color::DarkGrey;
+        let sep = (" · ".to_string(), dim);
+        let mut block: Vec<Vec<HudSpan>> = Vec::new();
 
-        self.cached_weather_info = if let Some(ref weather) = self.current_weather {
+        if let Some(ref weather) = self.current_weather {
+            let is_day = weather.sun.is_day;
             let (temp, temp_unit) = format_temperature(weather.temperature, self.units.temperature);
             let (wind, wind_unit) = format_wind_speed(weather.wind_speed, self.units.wind_speed);
             let (precip, precip_unit) =
                 format_precipitation(weather.precipitation, self.units.precipitation);
 
-            let offline_indicator = if self.is_offline {
-                match self.offline_data_cached_at {
-                    Some(cached_at) => {
-                        let age = unix_now().saturating_sub(cached_at);
-                        format!("ОФФЛАЙН (данные {}) | ", format_age(age))
-                    }
-                    None => "ОФФЛАЙН (симуляция) | ".to_string(),
-                }
+            // Строка 1: время · место · условие с глифом
+            let mut line = vec![(clock.clone(), Color::Cyan)];
+            if !location_str.is_empty() {
+                line.push(sep.clone());
+                line.push((location_str.clone(), Color::White));
+            }
+            line.push(sep.clone());
+            line.push((
+                format!(
+                    "{} {}",
+                    condition_glyph(weather.condition, is_day),
+                    condition_name_ru(weather.condition)
+                ),
+                condition_color(weather.condition, is_day),
+            ));
+            block.push(line);
+
+            // Строка 2: температура (цвет по шкале) и "ощущается"
+            let mut line = vec![(
+                format!("{:.1}{}", temp, temp_unit),
+                temperature_color(weather.temperature),
+            )];
+            if self.use_feels_like_temperature {
+                let (apparent, unit) =
+                    format_temperature(weather.feels_like_temperature, self.units.temperature);
+                line.push((format!("  ощущается {:.1}{}", apparent, unit), dim));
+            }
+            block.push(line);
+
+            // Строка 3: ветер со стрелкой + осадки
+            let precip_color = if weather.precipitation > 0.05 {
+                Color::Rgb { r: 110, g: 175, b: 255 }
             } else {
-                String::new()
+                dim
             };
-
-            // Компактный формат: место сразу после часов, без слова "Погода:",
-            // чтобы строка влезала в ~120 колонок (экран 1440px при шрифте 20)
-            format!(
-                "{}{} | {}{} | {:.1}{}{} | Ветер: {:.1}{} {} | Осадки: {:.1}{}{}",
-                clock,
-                location_str,
-                offline_indicator,
-                self.get_condition_text(),
-                temp,
-                temp_unit,
-                apparent_temp_str,
-                wind,
-                wind_unit,
-                wind_rumb_ru(weather.wind_direction),
-                precip,
-                precip_unit,
-                quit_hint
-            )
-        } else {
-            format!(
-                "{} | Погода: загрузка... {}",
-                clock,
-                self.loading_state.current_char()
-            )
-        };
-
-        // Вторая строка HUD: прогноз на +3/+6/+12 часов + ближайшее солнечное событие
-        self.cached_forecast_info = if let Some(ref weather) = self.current_weather {
-            let mut parts: Vec<String> = weather
-                .forecast
-                .iter()
-                .map(|point| {
-                    let (temp, unit) =
-                        format_temperature(point.temperature, self.units.temperature);
-                    let prob = match point.precipitation_probability {
-                        Some(p) if p >= 20 => format!(", осадки {}%", p),
-                        _ => String::new(),
-                    };
+            block.push(vec![
+                (
                     format!(
-                        "+{}ч {:.0}{} {}{}",
-                        point.hours_ahead,
-                        temp,
-                        unit,
-                        condition_name_ru(point.condition),
-                        prob
-                    )
-                })
-                .collect();
+                        "ветер {:.1}{} {}{}",
+                        wind,
+                        wind_unit,
+                        wind_rumb_ru(weather.wind_direction),
+                        wind_arrow(weather.wind_direction)
+                    ),
+                    Color::Grey,
+                ),
+                sep.clone(),
+                (format!("☂ {:.1}{}", precip, precip_unit), precip_color),
+            ]);
 
-            // Днём показываем закат, ночью - восход
-            let sun_event = if weather.sun.is_day {
-                weather.sun.set.map(|t| format!("Закат {}", t.format("%H:%M")))
+            // Строка 4: прогноз глифами + закат/восход
+            let mut line: Vec<HudSpan> = Vec::new();
+            for (i, point) in weather.forecast.iter().enumerate() {
+                if i > 0 {
+                    line.push((" ".to_string(), dim));
+                }
+                let (ptemp, _) = format_temperature(point.temperature, self.units.temperature);
+                line.push((format!("+{}ч", point.hours_ahead), dim));
+                line.push((
+                    format!(" {:.0}°", ptemp),
+                    temperature_color(point.temperature),
+                ));
+                line.push((
+                    condition_glyph(point.condition, true).to_string(),
+                    condition_color(point.condition, true),
+                ));
+            }
+            let sun_event = if is_day {
+                weather
+                    .sun
+                    .set
+                    .map(|t| (format!("☾ {}", t.format("%H:%M")), Color::Rgb {
+                        r: 255,
+                        g: 150,
+                        b: 80,
+                    }))
             } else {
                 weather
                     .sun
                     .rise
-                    .map(|t| format!("Восход {}", t.format("%H:%M")))
+                    .map(|t| (format!("☀ {}", t.format("%H:%M")), Color::Yellow))
             };
             if let Some(event) = sun_event {
-                parts.push(event);
+                if !line.is_empty() {
+                    line.push(sep.clone());
+                }
+                line.push(event);
+            }
+            if !line.is_empty() {
+                block.push(line);
             }
 
-            if parts.is_empty() {
-                String::new()
-            } else {
-                format!("Прогноз: {}", parts.join(" | "))
+            // Оффлайн-статус отдельной строкой
+            if self.is_offline {
+                let text = match self.offline_data_cached_at {
+                    Some(cached_at) => {
+                        let age = unix_now().saturating_sub(cached_at);
+                        format!("ОФФЛАЙН · данные {}", format_age(age))
+                    }
+                    None => "ОФФЛАЙН · симуляция".to_string(),
+                };
+                block.push(vec![(text, Color::Rgb { r: 255, g: 110, b: 110 })]);
             }
         } else {
-            String::new()
-        };
+            block.push(vec![
+                (clock.clone(), Color::Cyan),
+                (
+                    format!("  загрузка погоды {}", self.loading_state.current_char()),
+                    dim,
+                ),
+            ]);
+        }
+
+        // Плоский текст блока: для тестов и совместимости
+        self.cached_weather_info = block
+            .first()
+            .map(|line| line.iter().map(|(s, _)| s.as_str()).collect::<String>())
+            .unwrap_or_default();
+        self.cached_forecast_info = block
+            .iter()
+            .skip(1)
+            .map(|line| line.iter().map(|(s, _)| s.as_str()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        self.hud_block = block;
 
         self.weather_info_needs_update = false;
+    }
+
+    /// Весь текст HUD-блока одной строкой (для тестов)
+    pub fn hud_text(&self) -> String {
+        self.hud_block
+            .iter()
+            .map(|line| line.iter().map(|(s, _)| s.as_str()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     pub fn should_show_sun(&self) -> bool {
@@ -506,7 +627,7 @@ mod tests {
 
         assert!(
             app.cached_weather_info
-                .contains("Место: 34.08°N, 84.29°W")
+                .contains("34.08°N, 84.29°W")
         );
         assert!(!app.cached_weather_info.contains("Alpharetta"));
     }
@@ -521,7 +642,7 @@ mod tests {
         );
         app.update_cached_info();
 
-        assert!(app.cached_weather_info.contains("Место: Alpharetta"));
+        assert!(app.cached_weather_info.contains("Alpharetta"));
         assert!(!app.cached_weather_info.contains("34.08°N"));
     }
 
@@ -532,7 +653,7 @@ mod tests {
 
         assert!(
             app.cached_weather_info
-                .contains("Место: 34.08°N, 84.29°W")
+                .contains("34.08°N, 84.29°W")
         );
     }
 
@@ -548,7 +669,7 @@ mod tests {
 
         assert!(
             app.cached_weather_info
-                .contains("Место: Alpharetta (34.08°N, 84.29°W)")
+                .contains("Alpharetta (34.08°N, 84.29°W)")
         );
     }
 
@@ -559,7 +680,7 @@ mod tests {
 
         assert!(
             app.cached_weather_info
-                .contains("Место: 34.08°N, 84.29°W")
+                .contains("34.08°N, 84.29°W")
         );
         assert!(!app.cached_weather_info.contains("("));
     }

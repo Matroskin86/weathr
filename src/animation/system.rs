@@ -35,6 +35,8 @@ pub struct FrameContext<'a> {
     pub state: &'a AppState,
     pub show_leaves: bool,
     pub chimney: Option<ChimneyPosition>,
+    /// В прошлом кадре сверкнула молния (для реакции кота и прочих)
+    pub storm_flash: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +67,8 @@ pub trait AnimationSystem {
     fn on_iss_pass(&mut self, _label: &str) {}
     /// Демо-режим: показать все пасхалки и ускорить события
     fn on_demo_mode(&mut self, _demo: bool) {}
+    /// Над локацией проходит реальный поезд Starlink из count спутников
+    fn on_starlink_train(&mut self, _count: usize) {}
 
     fn update(&mut self, ctx: &FrameContext<'_>, rng: &mut dyn Rng, commands: &mut FrameCommands);
     fn render(&mut self, renderer: &mut TerminalRenderer, ctx: &FrameContext<'_>)

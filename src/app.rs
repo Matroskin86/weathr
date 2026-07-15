@@ -85,6 +85,49 @@ fn resolve_theme_bindings(
     }
 }
 
+/// Рисует HUD-блок в рамке в левом верхнем углу: строки из цветных кусков,
+/// рамка ненавязчиво-серая, ширина по самой длинной строке
+fn render_hud_block(
+    renderer: &mut TerminalRenderer,
+    block: &[Vec<crate::app_state::HudSpan>],
+) -> io::Result<()> {
+    use crossterm::style::Color;
+
+    if block.is_empty() {
+        return Ok(());
+    }
+
+    let frame_color = Color::Rgb { r: 90, g: 95, b: 105 };
+    let inner_width = block
+        .iter()
+        .map(|line| line.iter().map(|(s, _)| s.chars().count()).sum::<usize>())
+        .max()
+        .unwrap_or(0);
+    let x0: u16 = 1;
+    let y0: u16 = 0;
+
+    // Верхняя и нижняя грань
+    let top = format!("╭{}╮", "─".repeat(inner_width + 2));
+    let bottom = format!("╰{}╯", "─".repeat(inner_width + 2));
+    renderer.render_line_colored(x0, y0, &top, frame_color)?;
+    for (i, line) in block.iter().enumerate() {
+        let y = y0 + 1 + i as u16;
+        renderer.render_line_colored(x0, y, "│ ", frame_color)?;
+        let mut cursor = x0 + 2;
+        for (text, color) in line {
+            renderer.render_line_colored(cursor, y, text, *color)?;
+            cursor += text.chars().count() as u16;
+        }
+        // Дозаполняем фон до рамки пробелами, чтобы сцена не просвечивала
+        let used: usize = line.iter().map(|(s, _)| s.chars().count()).sum();
+        let pad: String = " ".repeat(inner_width - used + 1);
+        renderer.render_line_colored(cursor, y, &pad, frame_color)?;
+        renderer.render_line_colored(x0 + 3 + inner_width as u16, y, "│", frame_color)?;
+    }
+    renderer.render_line_colored(x0, y0 + 1 + block.len() as u16, &bottom, frame_color)?;
+    Ok(())
+}
+
 fn generate_offline_weather(rng: &mut impl rand::Rng) -> WeatherData {
     use chrono::{Local, Timelike};
     use rand::RngExt;
@@ -139,6 +182,8 @@ pub struct App {
     flights_receiver: Option<mpsc::Receiver<crate::flights::FlightLabel>>,
     // Канал пролётов МКС (None, если iss выключен)
     iss_receiver: Option<mpsc::Receiver<crate::flights::IssPass>>,
+    // Канал поездов Starlink (None, если starlink выключен)
+    starlink_receiver: Option<mpsc::Receiver<crate::starlink::StarlinkTrain>>,
     // Демо-режим: периодически спавнить показательные борт и МКС
     demo: bool,
     demo_frame: u64,
@@ -296,6 +341,16 @@ impl App {
             None
         };
 
+        let starlink_receiver = if config.starlink.enabled && simulate_condition.is_none() {
+            Some(crate::starlink::spawn_starlink_watcher(
+                config.location.latitude,
+                config.location.longitude,
+                config.starlink.poll_secs,
+            ))
+        } else {
+            None
+        };
+
         Self {
             state,
             animations,
@@ -309,6 +364,7 @@ impl App {
             offline_lookup,
             flights_receiver,
             iss_receiver,
+            starlink_receiver,
             demo,
             demo_frame: 0,
             frame_duration: {
@@ -431,7 +487,14 @@ impl App {
                 self.animations.spawn_iss_pass(&pass.label);
             }
 
-            // Демо: показательный борт на 5-й секунде и МКС на 20-й, повтор каждые 2 минуты
+            // Реальный поезд Starlink над зоной
+            if let Some(ref mut starlink_rx) = self.starlink_receiver
+                && let Ok(train) = starlink_rx.try_recv()
+            {
+                self.animations.spawn_starlink_train(train.count);
+            }
+
+            // Демо: борт на 5-й секунде, МКС на 20-й, Starlink на 45-й; цикл 2 минуты
             if self.demo {
                 self.demo_frame += 1;
                 let cycle = self.demo_frame % 1800;
@@ -444,6 +507,9 @@ impl App {
                 if cycle == 300 {
                     self.animations
                         .spawn_iss_pass("МКС | ~27600 км/ч | «Поехали!» - Гагарин");
+                }
+                if cycle == 675 {
+                    self.animations.spawn_starlink_train(8);
                 }
             }
 
@@ -503,20 +569,7 @@ impl App {
             self.state.update_cached_info();
 
             if !self.hide_hud {
-                renderer.render_line_colored(
-                    2,
-                    1,
-                    &self.state.cached_weather_info,
-                    crossterm::style::Color::Cyan,
-                )?;
-                if !self.state.cached_forecast_info.is_empty() {
-                    renderer.render_line_colored(
-                        2,
-                        2,
-                        &self.state.cached_forecast_info,
-                        crossterm::style::Color::DarkCyan,
-                    )?;
-                }
+                render_hud_block(renderer, &self.state.hud_block)?;
             }
 
             let attribution_x = if term_width > attribution.len() as u16 {

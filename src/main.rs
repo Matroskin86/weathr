@@ -6,6 +6,7 @@ mod cache;
 mod config;
 mod error;
 mod flights;
+mod starlink;
 mod geolocation;
 mod render;
 mod scene;

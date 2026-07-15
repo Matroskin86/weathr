@@ -63,6 +63,9 @@ pub struct NightSkySystem {
     aurora_frames: u32,
     aurora_cooldown: u32,
     aurora_t: f32,
+    // Поезд Starlink: x головы и число огоньков (None = не летит)
+    starlink_x: Option<f32>,
+    starlink_count: usize,
     terminal_width: u16,
     terminal_height: u16,
 }
@@ -87,6 +90,8 @@ impl NightSkySystem {
             aurora_frames: 0,
             aurora_cooldown: 20_000,
             aurora_t: 0.0,
+            starlink_x: None,
+            starlink_count: 0,
             terminal_width,
             terminal_height,
         }
@@ -233,6 +238,13 @@ impl AnimationSystem for NightSkySystem {
     fn on_resize(&mut self, size: TerminalSize) {
         self.terminal_width = size.width;
         self.terminal_height = size.height;
+    }
+
+    fn on_starlink_train(&mut self, count: usize) {
+        if self.starlink_x.is_none() {
+            self.starlink_count = count.clamp(4, 10);
+            self.starlink_x = Some(-4.0);
+        }
     }
 
     fn on_demo_mode(&mut self, demo: bool) {
@@ -412,6 +424,15 @@ impl AnimationSystem for NightSkySystem {
             }
         }
 
+        // Поезд Starlink: вереница ползёт слева направо (орбита восточная)
+        if let Some(x) = self.starlink_x.as_mut() {
+            *x += 0.45;
+            let tail = self.starlink_count as f32 * 3.0;
+            if *x > self.terminal_width as f32 + tail + 14.0 {
+                self.starlink_x = None;
+            }
+        }
+
         // Баба Яга: редкая гостья с пьяной траекторией
         if let Some(yaga) = self.yaga.as_mut() {
             yaga.phase += 0.12;
@@ -532,6 +553,37 @@ impl AnimationSystem for NightSkySystem {
                 {
                     let color = if i < 3 { Color::Cyan } else { Color::DarkGrey };
                     renderer.render_char(x as u16, y as u16, *ch, color)?;
+                }
+            }
+        }
+
+        // Поезд Starlink: цепочка огоньков с подписью
+        if let Some(head_x) = self.starlink_x {
+            let y: i16 = 6;
+            if y < self.terminal_height as i16 {
+                for k in 0..self.starlink_count {
+                    let x = (head_x - (k as f32) * 3.0).floor() as i16;
+                    if x >= 0 && x < self.terminal_width as i16 {
+                        // Лёгкое мерцание вереницы
+                        let bright = (self.frame / 4 + k as u32) % 5 != 0;
+                        let (ch, color) = if bright {
+                            ('•', Color::Rgb { r: 220, g: 230, b: 255 })
+                        } else {
+                            ('·', Color::Grey)
+                        };
+                        renderer.render_char(x as u16, y as u16, ch, color)?;
+                    }
+                }
+                let label = format!("Starlink x{}", self.starlink_count);
+                let label_x = (head_x + 2.0) as i16;
+                let label_y = y + 1;
+                if label_y < self.terminal_height as i16 {
+                    for (i, ch) in label.chars().enumerate() {
+                        let x = label_x + i as i16;
+                        if x >= 0 && x < self.terminal_width as i16 {
+                            renderer.render_char(x as u16, label_y as u16, ch, Color::DarkGrey)?;
+                        }
+                    }
                 }
             }
         }
