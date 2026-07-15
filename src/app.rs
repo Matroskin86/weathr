@@ -128,6 +128,45 @@ fn render_hud_block(
     Ok(())
 }
 
+/// Следит за батареей Mac через pmset: раз в минуту процент и статус зарядки.
+/// На машинах без батареи канал просто молчит.
+fn spawn_battery_watcher() -> mpsc::Receiver<(u8, bool)> {
+    let (tx, rx) = mpsc::channel(1);
+    tokio::spawn(async move {
+        loop {
+            let parsed = tokio::task::spawn_blocking(|| {
+                let output = std::process::Command::new("pmset")
+                    .args(["-g", "batt"])
+                    .output()
+                    .ok()?;
+                let text = String::from_utf8_lossy(&output.stdout).to_string();
+                let pct_pos = text.find('%')?;
+                let digits: String = text[..pct_pos]
+                    .chars()
+                    .rev()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect();
+                let pct: u8 = digits.chars().rev().collect::<String>().parse().ok()?;
+                let charging = text.contains(" charging")
+                    || text.contains("charged")
+                    || text.contains("AC Power");
+                Some((pct, charging))
+            })
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(state) = parsed
+                && tx.send(state).await.is_err()
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        }
+    });
+    rx
+}
+
 fn generate_offline_weather(rng: &mut impl rand::Rng) -> WeatherData {
     use chrono::{Local, Timelike};
     use rand::RngExt;
@@ -184,6 +223,11 @@ pub struct App {
     iss_receiver: Option<mpsc::Receiver<crate::flights::IssPass>>,
     // Канал поездов Starlink (None, если starlink выключен)
     starlink_receiver: Option<mpsc::Receiver<crate::starlink::StarlinkTrain>>,
+    // ИИ-пульс (настроение кота, мысль, цитата) и канал контекста для него
+    ai_receiver: Option<mpsc::Receiver<crate::ai_cat::AiPulse>>,
+    ai_context_tx: Option<tokio::sync::watch::Sender<crate::ai_cat::SceneContext>>,
+    // Батарея Mac: (процент, на зарядке)
+    battery_receiver: mpsc::Receiver<(u8, bool)>,
     // Демо-режим: периодически спавнить показательные борт и МКС
     demo: bool,
     demo_frame: u64,
@@ -351,6 +395,24 @@ impl App {
             None
         };
 
+        // ИИ-пульс: работает и в симуляции/демо - контекст всё равно осмысленный
+        let (ai_receiver, ai_context_tx) =
+            if config.ai.enabled && !config.ai.api_key.is_empty() {
+                let (ctx_tx, ctx_rx) =
+                    tokio::sync::watch::channel(crate::ai_cat::SceneContext::default());
+                let rx = crate::ai_cat::spawn_ai_watcher(
+                    config.ai.api_key.clone(),
+                    config.ai.model.clone(),
+                    config.ai.poll_secs,
+                    ctx_rx,
+                );
+                (Some(rx), Some(ctx_tx))
+            } else {
+                (None, None)
+            };
+
+        let battery_receiver = spawn_battery_watcher();
+
         Self {
             state,
             animations,
@@ -365,6 +427,9 @@ impl App {
             flights_receiver,
             iss_receiver,
             starlink_receiver,
+            ai_receiver,
+            ai_context_tx,
+            battery_receiver,
             demo,
             demo_frame: 0,
             frame_duration: {
@@ -492,6 +557,34 @@ impl App {
                 && let Ok(train) = starlink_rx.try_recv()
             {
                 self.animations.spawn_starlink_train(train.count);
+            }
+
+            // ИИ-пульс: настроение и мысль коту, цитата - на баннер самолёта
+            if let Some(ref mut ai_rx) = self.ai_receiver
+                && let Ok(pulse) = ai_rx.try_recv()
+            {
+                self.animations.apply_cat_pulse(pulse.mood, &pulse.thought);
+                self.animations.set_banner_quote(&pulse.quote);
+            }
+
+            // Свежий контекст сцены для ИИ (дёшево: watch перезаписывает значение)
+            if let Some(ref ctx_tx) = self.ai_context_tx
+                && let Some(ref weather) = self.state.current_weather
+            {
+                let _ = ctx_tx.send_replace(crate::ai_cat::SceneContext {
+                    city: self.state.city_name.clone().unwrap_or_default(),
+                    condition: crate::app_state::condition_name_ru(weather.condition).to_string(),
+                    temperature: weather.temperature,
+                    is_day: weather.sun.is_day,
+                });
+            }
+
+            // Батарея в HUD
+            if let Ok(battery) = self.battery_receiver.try_recv()
+                && self.state.battery != Some(battery)
+            {
+                self.state.battery = Some(battery);
+                self.state.weather_info_needs_update = true;
             }
 
             // Демо: борт на 5-й секунде, МКС на 20-й, Starlink на 45-й; цикл 2 минуты

@@ -153,6 +153,8 @@ pub struct AppState {
     pub offline_data_cached_at: Option<u64>,
     // Unix-время последнего успешного обновления погоды
     pub last_success_at: Option<u64>,
+    /// Батарея Mac: (процент, на зарядке). None - нет данных/десктоп
+    pub battery: Option<(u8, bool)>,
 }
 
 fn unix_now() -> u64 {
@@ -201,6 +203,7 @@ impl AppState {
             last_clock_minute: u32::MAX,
             offline_data_cached_at: None,
             last_success_at: None,
+            battery: None,
         }
     }
 
@@ -365,7 +368,7 @@ impl AppState {
             } else {
                 dim
             };
-            block.push(vec![
+            let mut line = vec![
                 (
                     format!(
                         "ветер {:.1}{} {}{}",
@@ -378,7 +381,23 @@ impl AppState {
                 ),
                 sep.clone(),
                 (format!("☂ {:.1}{}", precip, precip_unit), precip_color),
-            ]);
+            ];
+            // Батарея: цвет по заряду, молния при зарядке
+            if let Some((pct, charging)) = self.battery {
+                let color = if charging {
+                    Color::Rgb { r: 130, g: 220, b: 160 }
+                } else if pct <= 20 {
+                    Color::Rgb { r: 255, g: 110, b: 110 }
+                } else if pct <= 50 {
+                    Color::Rgb { r: 255, g: 205, b: 95 }
+                } else {
+                    Color::Rgb { r: 130, g: 220, b: 160 }
+                };
+                let bolt = if charging { "↯" } else { "" };
+                line.push(sep.clone());
+                line.push((format!("{}{}%", bolt, pct), color));
+            }
+            block.push(line);
 
             // Строка 4: прогноз глифами + закат/восход
             let mut line: Vec<HudSpan> = Vec::new();

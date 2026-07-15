@@ -51,6 +51,42 @@ pub struct Config {
     /// Поезда Starlink над локацией (TLE Celestrak + SGP4 локально)
     #[serde(default)]
     pub starlink: StarlinkConfig,
+    /// ИИ-пульс сцены: настроение кота, его мысли и цитаты-баннеры (OpenRouter)
+    #[serde(default)]
+    pub ai: AiConfig,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct AiConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Ключ OpenRouter (sk-or-...)
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "default_ai_model")]
+    pub model: String,
+    /// Период обращения к модели в секундах
+    #[serde(default = "default_ai_poll_secs")]
+    pub poll_secs: u64,
+}
+
+fn default_ai_model() -> String {
+    "google/gemini-2.5-flash-lite".to_string()
+}
+
+fn default_ai_poll_secs() -> u64 {
+    1200
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            api_key: String::new(),
+            model: default_ai_model(),
+            poll_secs: default_ai_poll_secs(),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -471,6 +507,7 @@ longitude = 0.0
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
             starlink: StarlinkConfig::default(),
+            ai: AiConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -500,6 +537,7 @@ longitude = 0.0
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
             starlink: StarlinkConfig::default(),
+            ai: AiConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -529,6 +567,7 @@ longitude = 0.0
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
             starlink: StarlinkConfig::default(),
+            ai: AiConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -558,6 +597,7 @@ longitude = 0.0
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
             starlink: StarlinkConfig::default(),
+            ai: AiConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),
@@ -587,6 +627,7 @@ longitude = 0.0
             flights: FlightsConfig::default(),
             iss: IssConfig::default(),
             starlink: StarlinkConfig::default(),
+            ai: AiConfig::default(),
             units: WeatherUnits::default(),
             silent: false,
             provider: HashMap::new(),

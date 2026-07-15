@@ -69,6 +69,10 @@ pub trait AnimationSystem {
     fn on_demo_mode(&mut self, _demo: bool) {}
     /// Над локацией проходит реальный поезд Starlink из count спутников
     fn on_starlink_train(&mut self, _count: usize) {}
+    /// ИИ-пульс: настроение кота и его мысль
+    fn on_cat_pulse(&mut self, _mood: crate::ai_cat::CatMood, _thought: &str) {}
+    /// Цитата для баннера за следующим самолётом
+    fn on_banner_quote(&mut self, _quote: &str) {}
 
     fn update(&mut self, ctx: &FrameContext<'_>, rng: &mut dyn Rng, commands: &mut FrameCommands);
     fn render(&mut self, renderer: &mut TerminalRenderer, ctx: &FrameContext<'_>)

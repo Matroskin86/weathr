@@ -95,6 +95,10 @@ pub struct CatSystem {
     // Мышиная норка у забора: выглядывание и пауза между
     hole_peek: u32,
     hole_cooldown: u32,
+    // ИИ-настроение гнёт веса состояний; мысль показывается облачком
+    mood: Option<crate::ai_cat::CatMood>,
+    thought: String,
+    thought_frames: u32,
     // Демо-режим: короткие таймеры, частые события
     demo: bool,
     terminal_width: u16,
@@ -121,6 +125,9 @@ impl CatSystem {
             startled: 0,
             hole_peek: 0,
             hole_cooldown: 900,
+            mood: None,
+            thought: String::new(),
+            thought_frames: 0,
             demo: false,
             terminal_width,
             terminal_height,
@@ -228,11 +235,34 @@ impl CatSystem {
             (0.18, 0.30, 0.12, 0.16, 0.05)
         };
         // В демо мышь выскакивает почти через раз, охота чаще
-        let (hunt_p, mouse_p) = if self.demo {
-            (hunt_p * 1.5, 0.4)
+        let (mut walk_p, mut sleep_p, mut hunt_p, mut mouse_p, dig_p) = if self.demo {
+            (walk_p, sleep_p, hunt_p * 1.5, 0.4, dig_p)
         } else {
-            (hunt_p, mouse_p)
+            (walk_p, sleep_p, hunt_p, mouse_p, dig_p)
         };
+
+        // ИИ-настроение сдвигает характер кота
+        match self.mood {
+            Some(crate::ai_cat::CatMood::Playful) => {
+                walk_p *= 1.6;
+                hunt_p *= 1.4;
+                sleep_p *= 0.5;
+            }
+            Some(crate::ai_cat::CatMood::Lazy) => {
+                sleep_p *= 2.0;
+                walk_p *= 0.6;
+            }
+            Some(crate::ai_cat::CatMood::Hunty) => {
+                mouse_p *= 2.2;
+                hunt_p *= 1.6;
+            }
+            Some(crate::ai_cat::CatMood::Cozy) => {
+                sleep_p *= 1.4;
+                walk_p *= 0.8;
+                mouse_p *= 0.6;
+            }
+            None => {}
+        }
 
         let mut threshold = moon_p;
         if roll < threshold {
@@ -303,6 +333,7 @@ impl CatSystem {
         if ctx.storm_flash {
             self.startled = 10;
         }
+        self.thought_frames = self.thought_frames.saturating_sub(1);
 
         // Мышиная норка у забора: мышь выглядывает, когда кот далеко
         let hole_x = self.hole_x();
@@ -691,6 +722,35 @@ impl CatSystem {
             }
         }
 
+        // Мысль кота в облачке над головой
+        if self.thought_frames > 0 && !self.thought.is_empty() {
+            let bubble = format!("( {} )", self.thought);
+            let bubble_len = bubble.chars().count() as i16;
+            // Облачко над котом, прижимаем к краям экрана
+            let bx = (x - bubble_len / 2 + CAT_WIDTH / 2)
+                .clamp(0, (self.terminal_width as i16 - bubble_len).max(0));
+            let by = cat_y - 2;
+            if by >= 0 {
+                for (i, ch) in bubble.chars().enumerate() {
+                    let px = bx + i as i16;
+                    if px >= 0 && px < self.terminal_width as i16 {
+                        let color = if ch == '(' || ch == ')' {
+                            Color::DarkGrey
+                        } else {
+                            Color::Grey
+                        };
+                        renderer.render_char(px as u16, by as u16, ch, color)?;
+                    }
+                }
+                // Хвостик облачка к голове кота
+                let oy = cat_y - 1;
+                let ox = x + 4;
+                if oy >= 0 && ox >= 0 && ox < self.terminal_width as i16 {
+                    renderer.render_char(ox as u16, oy as u16, 'o', Color::DarkGrey)?;
+                }
+            }
+        }
+
         // Испуганный возглас над вздрогнувшим котом
         if self.startled > 0 {
             let bang_x = x + 3;
@@ -795,6 +855,15 @@ impl AnimationSystem for CatSystem {
 
     fn on_demo_mode(&mut self, demo: bool) {
         self.demo = demo;
+    }
+
+    fn on_cat_pulse(&mut self, mood: crate::ai_cat::CatMood, thought: &str) {
+        self.mood = Some(mood);
+        if !thought.is_empty() {
+            self.thought = thought.to_string();
+            // Мысль висит в облачке около 15 секунд
+            self.thought_frames = 220;
+        }
     }
 
     fn update(&mut self, ctx: &FrameContext<'_>, rng: &mut dyn Rng, _commands: &mut FrameCommands) {

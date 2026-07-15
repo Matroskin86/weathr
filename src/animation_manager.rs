@@ -145,6 +145,18 @@ impl AnimationManager {
         }
     }
 
+    pub fn apply_cat_pulse(&mut self, mood: crate::ai_cat::CatMood, thought: &str) {
+        for system in &mut self.systems {
+            system.on_cat_pulse(mood, thought);
+        }
+    }
+
+    pub fn set_banner_quote(&mut self, quote: &str) {
+        for system in &mut self.systems {
+            system.on_banner_quote(quote);
+        }
+    }
+
     pub fn set_flights_mode(&mut self, real_only: bool) {
         for system in &mut self.systems {
             system.on_flights_mode(real_only);

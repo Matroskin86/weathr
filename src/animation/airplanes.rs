@@ -56,6 +56,8 @@ struct Airplane {
     speed: f32,
     // Подпись реального борта: "A320 RA-73756 | SU1234 SVO-LED"
     label: Option<String>,
+    // Рекламный баннер-цитата, тянется на тросе за хвостом
+    banner: Option<String>,
 }
 
 pub struct AirplaneSystem {
@@ -65,6 +67,8 @@ pub struct AirplaneSystem {
     spawn_cooldown: u16,
     // true = только реальные борта, случайные не спавнятся
     real_only: bool,
+    // Цитата ждёт следующего рейса
+    pending_banner: Option<String>,
 }
 
 impl AirplaneSystem {
@@ -75,6 +79,7 @@ impl AirplaneSystem {
             terminal_height,
             spawn_cooldown: 0,
             real_only: false,
+            pending_banner: None,
         }
     }
 
@@ -97,11 +102,12 @@ impl AirplaneSystem {
 
         let width_f = terminal_width as f32;
         self.planes.retain(|p| {
-            // Запас на ширину арта и подписи, чтобы борт полностью уходил за край
+            // Запас на ширину арта, подписи и баннера: борт уходит целиком
             let margin = Self::art_width(art_eastbound())
-                .max(p.label.as_ref().map_or(0.0, |l| l.chars().count() as f32));
+                .max(p.label.as_ref().map_or(0.0, |l| l.chars().count() as f32))
+                .max(p.banner.as_ref().map_or(0.0, |b| b.chars().count() as f32 + 8.0));
             if p.speed >= 0.0 {
-                p.x < width_f
+                p.x - margin < width_f
             } else {
                 p.x + margin > 0.0
             }
@@ -129,6 +135,7 @@ impl AirplaneSystem {
             y,
             speed,
             label: None,
+            banner: self.pending_banner.take(),
         });
     }
 
@@ -153,6 +160,7 @@ impl AirplaneSystem {
             y,
             speed,
             label: Some(label.to_string()),
+            banner: self.pending_banner.take(),
         });
     }
 
@@ -188,6 +196,44 @@ impl AirplaneSystem {
                             _ => Color::White,
                         };
                         renderer.render_char(render_x as u16, render_y as u16, ch, color)?;
+                    }
+                }
+            }
+
+            // Баннер-цитата на тросе за хвостом
+            if let Some(ref banner) = plane.banner {
+                let text = format!("[ {} ]", banner);
+                let text_len = text.chars().count() as i16;
+                let art_w = art.iter().map(|l| l.chars().count()).max().unwrap_or(0) as i16;
+                let banner_y = y + 1;
+                // Трос и плакат сзади по ходу движения
+                let (rope_x, text_x) = if plane.speed >= 0.0 {
+                    (x - 3, x - 3 - text_len)
+                } else {
+                    (x + art_w, x + art_w + 3)
+                };
+                if banner_y >= 0 && banner_y < self.terminal_height as i16 {
+                    for i in 0..3 {
+                        let px = rope_x + i;
+                        if px >= 0 && px < self.terminal_width as i16 {
+                            renderer.render_char(
+                                px as u16,
+                                banner_y as u16,
+                                '═',
+                                Color::DarkGrey,
+                            )?;
+                        }
+                    }
+                    for (i, ch) in text.chars().enumerate() {
+                        let px = text_x + i as i16;
+                        if px >= 0 && px < self.terminal_width as i16 {
+                            let color = if ch == '[' || ch == ']' {
+                                Color::DarkGrey
+                            } else {
+                                Color::White
+                            };
+                            renderer.render_char(px as u16, banner_y as u16, ch, color)?;
+                        }
                     }
                 }
             }
@@ -244,6 +290,12 @@ impl AnimationSystem for AirplaneSystem {
 
     fn on_flights_mode(&mut self, real_only: bool) {
         self.real_only = real_only;
+    }
+
+    fn on_banner_quote(&mut self, quote: &str) {
+        if !quote.is_empty() {
+            self.pending_banner = Some(quote.to_string());
+        }
     }
 
     fn update(&mut self, ctx: &FrameContext<'_>, rng: &mut dyn Rng, _commands: &mut FrameCommands) {
