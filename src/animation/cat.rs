@@ -88,6 +88,8 @@ pub struct CatSystem {
     sky_watch_frames: u32,
     // Светлячок присел на хвост спящего кота (кадров осталось)
     firefly_rest: u32,
+    // В демо первая мышь показывается гарантированно (один раз)
+    demo_mouse_done: bool,
     // Демо-режим: короткие таймеры, частые события
     demo: bool,
     terminal_width: u16,
@@ -110,6 +112,7 @@ impl CatSystem {
             prey_phase: 0.0,
             sky_watch_frames: 0,
             firefly_rest: 0,
+            demo_mouse_done: false,
             demo: false,
             terminal_width,
             terminal_height,
@@ -184,7 +187,7 @@ impl CatSystem {
     }
 
     fn start_mouse_hunt(&mut self, rng: &mut (impl Rng + ?Sized)) {
-||        self.prey = Prey::Mouse;
+        self.prey = Prey::Mouse;
         self.state = CatState::Hunt(HuntPhase::Stalk);
         self.timer = 450;
         // Мышь выскакивает рядом и удирает от кота к ближайшему краю
@@ -299,6 +302,18 @@ impl CatSystem {
         if self.state == CatState::Shelter {
             self.state = CatState::Sit;
             self.timer = 45;
+        }
+
+        // Демо: первая мышь гарантированно на ~8-й секунде, чтобы её точно
+        // увидели. Пробежавшая мышь будит кота из любого занятия, кроме
+        // укрытия от непогоды и уже идущей охоты
+        if self.demo
+            && !self.demo_mouse_done
+            && self.frame > 110
+            && !matches!(self.state, CatState::Shelter | CatState::Hunt(_))
+        {
+            self.demo_mouse_done = true;
+            self.start_mouse_hunt(rng);
         }
 
         // В небе самолёт или МКС: спокойные занятия прерываются - кот смотрит
@@ -694,12 +709,13 @@ impl AnimationSystem for CatSystem {
     }
 
     fn on_real_flight(&mut self, _label: &str, _eastbound: bool) {
-        // Самолёт летит через экран около 20 секунд - кот провожает взглядом
-        self.sky_watch_frames = 300;
+        // Самолёт летит через экран около 20 секунд - кот провожает взглядом.
+        // В демо короче, иначе кот всё демо пялится в небо вместо своей жизни
+        self.sky_watch_frames = if self.demo { 90 } else { 300 };
     }
 
     fn on_iss_pass(&mut self, _label: &str) {
-        self.sky_watch_frames = 220;
+        self.sky_watch_frames = if self.demo { 80 } else { 220 };
     }
 
     fn on_demo_mode(&mut self, demo: bool) {
